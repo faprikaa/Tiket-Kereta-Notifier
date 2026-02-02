@@ -8,7 +8,9 @@ Bot Telegram untuk monitoring ketersediaan tiket kereta api dari TiketKai dan Tr
 - ✅ **Telegram Bot** - Notifikasi real-time via Telegram
 - ✅ **Webhook Mode** - Menggunakan Cloudflare Tunnel (no polling!)
 - ✅ **Auto Check** - Monitoring otomatis dengan interval kustom
-- ✅ **Filter** - Filter berdasarkan kelas dan harga maksimal
+- ✅ **Target Train Filter** - Monitor kereta spesifik berdasarkan nama
+- ✅ **Smart Notification** - Hanya kirim notifikasi ketika ada kursi tersedia
+- ✅ **Startup Notification** - Notifikasi saat bot berhasil start
 
 ## Installation
 
@@ -58,27 +60,26 @@ TELEGRAM_CHAT_ID=your_chat_id_here
 
 # Webhook Mode (requires cloudflared)
 USE_WEBHOOK=true
-WEBHOOK_PORT=8080
+WEBHOOK_PORT=8081
 
 # Train Configuration
-TRAIN_NAME=BENGAWAN
-TRAIN_ORIGIN=LPN
-TRAIN_DESTINATION=CKR
-TRAIN_DATE=2026-02-16
-TRAIN_INTERVAL=180
-TRAIN_MAX_PRICE=300000
+TRAIN_NAME=JAYAKARTA        # Target kereta (filter untuk /check dan scheduler)
+TRAIN_ORIGIN=LPN            # Kode stasiun asal
+TRAIN_DESTINATION=CKR       # Kode stasiun tujuan
+TRAIN_DATE=2026-02-16       # Tanggal keberangkatan (YYYY-MM-DD)
+TRAIN_INTERVAL=60           # Interval check dalam detik
 ```
 
 ## Usage
 
 ```bash
 # Run dengan provider dari .env
-go run ./cmd/...
+go run ./cmd/main.go
 
-# Atau override via command line
-go run ./cmd/... tiketkai
-go run ./cmd/... traveloka
-go run ./cmd/... help
+# Atau override provider via command line
+go run ./cmd/main.go tiketkai
+go run ./cmd/main.go traveloka
+go run ./cmd/main.go help
 ```
 
 ## Webhook vs Polling Mode
@@ -93,43 +94,69 @@ Webhook mode akan:
 2. Spawn `cloudflared tunnel` untuk dapatkan URL publik
 3. Set Telegram webhook ke URL tersebut
 4. Terima updates langsung via HTTP POST
+5. Kirim notifikasi startup ke Telegram
 
 ## Telegram Commands
 
-### TiketKai
 | Command | Description |
 |---------|-------------|
-| `/check` | Check semua kereta sekarang |
-| `/list [index]` | List kereta tersedia |
-| `/status` | Status bot |
-| `/interval <index> <minutes>` | Set interval check |
-| `/toggle <index>` | Enable/disable train |
-| `/filter <index> <classes>` | Set filter kelas |
-| `/maxprice <index> <price>` | Set harga maksimal |
-| `/stats` | Statistik |
+| `/check` | Check target train (berdasarkan TRAIN_NAME) |
+| `/list` | List semua kereta tersedia (tanpa filter) |
+| `/status` | Status bot dan provider |
 | `/help` | Bantuan |
 
-### Traveloka
-| Command | Description |
-|---------|-------------|
-| `/check` | Search tiket |
-| `/status` | Status bot |
-| `/help` | Bantuan |
+## How It Works
+
+### Scheduler
+- Bot akan check ketersediaan kereta secara berkala sesuai `TRAIN_INTERVAL`
+- Hanya kereta dengan nama yang cocok dengan `TRAIN_NAME` yang akan dimonitor
+- Notifikasi **hanya dikirim jika ada kursi tersedia** (bukan 0)
+
+### Commands
+- `/check` - Menggunakan filter `TRAIN_NAME`, hanya tampilkan target kereta
+- `/list` - Tampilkan **semua** kereta tanpa filter
 
 ## Project Structure
 
 ```
 ├── cmd/
-│   └── main.go              # Entry point
+│   ├── main.go              # Entry point
+│   └── test.go              # Test utilities
 ├── internal/
+│   ├── bot/                 # Bot commands registration
+│   ├── common/              # Shared interfaces (Provider, Train)
 │   ├── config/              # Environment loading
-│   ├── telegram/            # Shared Telegram bot + webhook
+│   ├── telegram/            # Telegram bot + webhook
 │   ├── tiketkai/            # TiketKai provider
 │   ├── traveloka/           # Traveloka provider
-│   └── tunnel/              # Cloudflare tunnel
+│   └── tunnel/              # Cloudflare tunnel management
 ├── .env.example             # Template config
+├── .gitignore
 └── go.mod
 ```
+
+## Providers
+
+### TiketKai
+- API: `https://sc-microservice-tiketkai.bmsecure.id`
+- Menggunakan AES encryption untuk payload
+- Support filter berdasarkan nama kereta
+
+### Traveloka
+- API: `https://www.traveloka.com/api/v2/train`
+- Direct JSON API
+- Support filter berdasarkan nama kereta
+
+## Troubleshooting
+
+### API Error RC: 89 (TiketKai)
+Payload atau headers tidak sesuai. Pastikan menggunakan versi terbaru.
+
+### Context Deadline Exceeded
+API timeout. Timeout sudah diset 30 detik, coba lagi.
+
+### Tunnel Not Accessible
+Cloudflare tunnel gagal. Pastikan `cloudflared` terinstall dan bisa diakses.
 
 ## Credits
 
