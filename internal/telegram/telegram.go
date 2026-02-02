@@ -134,6 +134,25 @@ type Bot struct {
 	Logger   *slog.Logger
 }
 
+// Webhook Wrapper Methods
+
+func (b *Bot) DeleteWebhook() {
+	if err := DeleteWebhook(); err != nil {
+		b.Logger.Error("DeleteWebhook failed", "error", err)
+	}
+}
+
+func (b *Bot) SetWebhook(url string) {
+	if err := SetWebhook(url); err != nil {
+		b.Logger.Error("SetWebhook failed", "error", err)
+	}
+}
+
+func (b *Bot) StartWebhook(port int, chatIDs []string) error {
+	server := NewWebhookServer(port, b)
+	return server.Start()
+}
+
 // NewBot creates a new bot instance
 func NewBot(logger *slog.Logger) *Bot {
 	return &Bot{

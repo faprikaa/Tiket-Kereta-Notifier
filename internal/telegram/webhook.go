@@ -31,6 +31,7 @@ func (w *WebhookServer) Start() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/webhook", w.handleWebhook)
 	mux.HandleFunc("/health", w.handleHealth)
+	mux.HandleFunc("/health/", w.handleHealth)
 
 	w.server = &http.Server{
 		Addr:         fmt.Sprintf(":%d", w.port),
@@ -145,7 +146,7 @@ func SetWebhook(webhookURL string) error {
 	url := fmt.Sprintf("https://api.telegram.org/bot%s/setWebhook", Token)
 
 	payload := map[string]interface{}{
-		"url":             webhookURL + "/webhook",
+		"url":             webhookURL,
 		"allowed_updates": []string{"message"},
 	}
 
@@ -169,7 +170,7 @@ func SetWebhook(webhookURL string) error {
 		return fmt.Errorf("telegram API error: %s", result.Description)
 	}
 
-	Logger.Info("Webhook set successfully", "url", webhookURL+"/webhook")
+	Logger.Info("Webhook set successfully", "url", webhookURL)
 	return nil
 }
 

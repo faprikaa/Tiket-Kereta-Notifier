@@ -1,4 +1,3 @@
-// Package tiketkai provides train ticket checking using TiketKai.com API with Telegram bot integration
 package tiketkai
 
 import (
@@ -8,1139 +7,294 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"strconv"
 	"strings"
-	"sync"
-	"syscall"
 	"time"
 
-	"github.com/joho/godotenv"
-	"golang.org/x/text/language"
-	"golang.org/x/text/message"
-	"golang.org/x/time/rate"
+	"tiket-kereta-notifier/internal/common"
 )
 
-// --- Constants ---
 const (
-	TiketKaiAPIUrl = "https://sc-microservice-tiketkai.bmsecure.id/train/search"
-	UserAgent      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
-	Key            = "78455d8581f1fc41"
-	IV             = "34f1cdf17d1aacb8"
-
-	TelegramPollingInterval = 5 * time.Second
-	StateFileName           = "scraper_state.json"
-	HealthPort              = ":8080"
-	MaxRetries              = 3
-	RequestsPerSecond       = 2
+	APIUrl = "https://sc-microservice-tiketkai.bmsecure.id/train/search"
+	Key    = "78455d8581f1fc41"
+	IV     = "34f1cdf17d1aacb8"
 )
 
-// --- Commands ---
-const (
-	CmdCheck    = "/check"
-	CmdList     = "/list"
-	CmdStatus   = "/status"
-	CmdInterval = "/interval"
-	CmdStats    = "/stats"
-	CmdHelp     = "/help"
-	CmdToggle   = "/toggle"
-	CmdFilter   = "/filter"
-	CmdMaxPrice = "/maxprice"
-)
-
-// --- Global Variables ---
-var (
-	TeleToken    string
-	TeleChatIDs  []string
-	Trains       []*TrainConfig
-	LastUpdateID int64
-	trainMutex   sync.RWMutex
-	printer      = message.NewPrinter(language.Indonesian)
-	limiter      *rate.Limiter
-	logger       *slog.Logger
-	startTime    time.Time
-)
-
-// --- Structs ---
-type TrainConfig struct {
-	Index         int           `json:"index"`
-	Name          string        `json:"name"`
-	Origin        string        `json:"origin"`
-	Destination   string        `json:"destination"`
-	Date          string        `json:"date"`
-	Enabled       bool          `json:"enabled"`
-	CheckInterval time.Duration `json:"check_interval"`
-	LastCheck     time.Time     `json:"last_check"`
-	CheckCount    int           `json:"check_count"`
-	FilterClass   []string      `json:"filter_class"`
-	MaxPrice      int           `json:"max_price"`
+// Provider implements common.Provider for TiketKai
+type Provider struct {
+	Logger        *slog.Logger
+	Origin        string
+	Destination   string
+	Date          string // YYYY-MM-DD
+	TrainName     string // Target train name filter
+	CheckInterval time.Duration
 }
 
-type PersistentState struct {
-	LastUpdateID int64                    `json:"last_update_id"`
-	TrainStates  map[int]TrainStateBackup `json:"train_states"`
-	SavedAt      time.Time                `json:"saved_at"`
-}
-
-type TrainStateBackup struct {
-	CheckCount    int           `json:"check_count"`
-	Enabled       bool          `json:"enabled"`
-	CheckInterval time.Duration `json:"check_interval"`
-	FilterClass   []string      `json:"filter_class"`
-	MaxPrice      int           `json:"max_price"`
-}
-
-type SearchPayload struct {
-	App         string  `json:"app"`
-	Via         string  `json:"via"`
-	Date        string  `json:"date"`
-	Destination string  `json:"destination"`
-	Origin      string  `json:"origin"`
-	ProductCode string  `json:"productCode"`
-	DeviceInfo  DevInfo `json:"deviceInfo"`
-}
-
-type DevInfo struct {
-	Model       string `json:"model"`
-	VersionCode int    `json:"versionCode"`
-	VersionName string `json:"versionName"`
-}
-
-type TiketResponse struct {
-	RC   string      `json:"rc"`
-	RD   string      `json:"rd"`
-	Data []TrainData `json:"data"`
-}
-
-type TrainData struct {
-	TrainName     string     `json:"trainName"`
-	TrainNumber   string     `json:"trainNumber"`
-	DepartureDate string     `json:"departureDate"`
-	DepartureTime string     `json:"departureTime"`
-	ArrivalDate   string     `json:"arrivalDate"`
-	ArrivalTime   string     `json:"arrivalTime"`
-	Duration      string     `json:"duration"`
-	Seats         []SeatData `json:"seats"`
-}
-
-type SeatData struct {
-	Class        string      `json:"class"`
-	Availability interface{} `json:"availability"`
-	PriceAdult   interface{} `json:"priceAdult"`
-}
-
-// --- Encryption ---
-func pkcs7Pad(data []byte, blockSize int) []byte {
-	padding := blockSize - len(data)%blockSize
-	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
-	return append(data, padtext...)
-}
-
-func encryptAESBase64(plaintext string, key, iv string) (string, error) {
-	block, err := aes.NewCipher([]byte(key))
-	if err != nil {
-		return "", err
+// NewProvider creates a new TiketKai provider
+func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration) *Provider {
+	return &Provider{
+		Logger:        logger,
+		Origin:        origin,
+		Destination:   dest,
+		Date:          date,
+		TrainName:     trainName,
+		CheckInterval: interval,
 	}
-	pt := pkcs7Pad([]byte(plaintext), block.BlockSize())
-	mode := cipher.NewCBCEncrypter(block, []byte(iv))
-	ciphertext := make([]byte, len(pt))
-	mode.CryptBlocks(ciphertext, pt)
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }
 
-// --- Retry Logic ---
-func retryWithBackoff(ctx context.Context, fn func() error, maxRetries int) error {
-	var lastErr error
-	for i := 0; i < maxRetries; i++ {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-		if err := fn(); err == nil {
-			return nil
-		} else {
-			lastErr = err
-			backoff := time.Duration(1<<i) * time.Second
-			logger.Warn("Request failed, retrying", "attempt", i+1, "backoff", backoff, "error", err)
-			time.Sleep(backoff)
-		}
-	}
-	return fmt.Errorf("max retries exceeded: %w", lastErr)
+func (p *Provider) Name() string {
+	return "TiketKai"
 }
 
-// --- Persistent State ---
-func getStateFilePath() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return StateFileName
-	}
-	return filepath.Join(filepath.Dir(exe), StateFileName)
-}
-
-func saveState() error {
-	trainMutex.RLock()
-	defer trainMutex.RUnlock()
-
-	state := PersistentState{
-		LastUpdateID: LastUpdateID,
-		TrainStates:  make(map[int]TrainStateBackup),
-		SavedAt:      time.Now(),
+func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
+	if p.Origin == "" || p.Destination == "" {
+		return nil, fmt.Errorf("origin and destination required")
 	}
 
-	for _, t := range Trains {
-		state.TrainStates[t.Index] = TrainStateBackup{
-			CheckCount:    t.CheckCount,
-			Enabled:       t.Enabled,
-			CheckInterval: t.CheckInterval,
-			FilterClass:   t.FilterClass,
-			MaxPrice:      t.MaxPrice,
-		}
+	p.Logger.Info("Searching TiketKai", "origin", p.Origin, "dest", p.Destination, "date", p.Date)
+
+	payload := map[string]interface{}{
+		"app":         "TKAI",
+		"via":         "mobile_web",
+		"date":        p.Date,
+		"destination": p.Destination,
+		"origin":      p.Origin,
+		"productCode": "WKAI",
+		"deviceInfo": map[string]interface{}{
+			"model":       "Windows NT 10.0",
+			"versionCode": 10037,
+			"versionName": "1.3.0",
+		},
 	}
 
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(getStateFilePath(), data, 0644)
-}
-
-func loadState() error {
-	data, err := os.ReadFile(getStateFilePath())
-	if err != nil {
-		if os.IsNotExist(err) {
-			logger.Info("No previous state found, starting fresh")
-			return nil
-		}
-		return err
-	}
-
-	var state PersistentState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return err
-	}
-
-	LastUpdateID = state.LastUpdateID
-	logger.Info("Loaded state", "saved_at", state.SavedAt, "last_update_id", state.LastUpdateID)
-
-	trainMutex.Lock()
-	defer trainMutex.Unlock()
-
-	for _, t := range Trains {
-		if backup, ok := state.TrainStates[t.Index]; ok {
-			t.CheckCount = backup.CheckCount
-			t.Enabled = backup.Enabled
-			t.CheckInterval = backup.CheckInterval
-			if len(backup.FilterClass) > 0 {
-				t.FilterClass = backup.FilterClass
-			}
-			if backup.MaxPrice > 0 {
-				t.MaxPrice = backup.MaxPrice
-			}
-			logger.Info("Restored train state", "name", t.Name, "check_count", t.CheckCount)
-		}
-	}
-	return nil
-}
-
-// --- Health Check Server ---
-func startHealthServer(ctx context.Context) {
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		trainMutex.RLock()
-		enabledCount := 0
-		totalChecks := 0
-		for _, t := range Trains {
-			if t.Enabled {
-				enabledCount++
-			}
-			totalChecks += t.CheckCount
-		}
-		trainMutex.RUnlock()
-
-		health := map[string]interface{}{
-			"status":        "healthy",
-			"uptime":        time.Since(startTime).String(),
-			"trains_total":  len(Trains),
-			"trains_active": enabledCount,
-			"total_checks":  totalChecks,
-			"timestamp":     time.Now().Format(time.RFC3339),
-		}
-		json.NewEncoder(w).Encode(health)
-	})
-
-	mux.HandleFunc("/trains", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		trainMutex.RLock()
-		defer trainMutex.RUnlock()
-		json.NewEncoder(w).Encode(Trains)
-	})
-
-	server := &http.Server{Addr: HealthPort, Handler: mux}
-
-	go func() {
-		logger.Info("Starting health server", "port", HealthPort)
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("Health server error", "error", err)
-		}
-	}()
-
-	<-ctx.Done()
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	server.Shutdown(shutdownCtx)
-}
-
-// --- Telegram ---
-func sendTelegramMessage(text string, chatIDs ...string) bool {
-	targetChatIDs := TeleChatIDs
-	if len(chatIDs) > 0 && chatIDs[0] != "" {
-		targetChatIDs = chatIDs
-	}
-	if len(targetChatIDs) == 0 {
-		return false
-	}
-
-	currentTime := time.Now().Format("2006-01-02 15:04:05 WIB")
-	fullMessage := fmt.Sprintf("[%s] %s", currentTime, text)
-
-	const maxLength = 4096
-	if len(fullMessage) > maxLength {
-		fullMessage = fullMessage[:maxLength-25] + "\n\n[Message truncated]"
-	}
-
-	success := false
-	for _, chatID := range targetChatIDs {
-		if sendToSingleChat(fullMessage, chatID) {
-			success = true
-		}
-	}
-	return success
-}
-
-func sendToSingleChat(message, chatID string) bool {
-	limiter.Wait(context.Background())
-
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", TeleToken)
-	body, _ := json.Marshal(map[string]interface{}{
-		"chat_id": chatID,
-		"text":    message,
-	})
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewBuffer(body))
-	if err != nil {
-		logger.Error("Failed to send telegram message", "chat_id", chatID, "error", err)
-		return false
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == 200 {
-		logger.Debug("Telegram message sent", "chat_id", chatID)
-		return true
-	}
-
-	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err == nil {
-		if params, ok := result["parameters"].(map[string]interface{}); ok {
-			if newID, exists := params["migrate_to_chat_id"]; exists {
-				newChatID := fmt.Sprintf("%.0f", newID.(float64))
-				logger.Info("Chat migrated", "old_id", chatID, "new_id", newChatID)
-				for i, id := range TeleChatIDs {
-					if id == chatID {
-						TeleChatIDs[i] = newChatID
-						break
-					}
-				}
-				return sendToSingleChat(message, newChatID)
-			}
-		}
-	}
-	return false
-}
-
-func getTelegramUpdates(ctx context.Context, offset int64) ([]map[string]interface{}, error) {
-	// Note: Don't rate limit polling - it needs to be responsive to commands
-	url := fmt.Sprintf("https://api.telegram.org/bot%s/getUpdates?offset=%d&timeout=5", TeleToken, offset)
-	client := &http.Client{Timeout: 15 * time.Second}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	jsonBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
+	encrypted, err := encryptAESBase64(string(jsonBytes), Key, IV)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt failed: %w", err)
+	}
+
+	// Send encrypted data directly (not wrapped in JSON)
+	req, err := http.NewRequestWithContext(ctx, "POST", APIUrl, bytes.NewBufferString(encrypted))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("accept", "application/json, text/plain, */*")
+	req.Header.Add("accept-language", "en-US,en;q=0.9")
+	req.Header.Add("content-type", "text/plain")
+	req.Header.Add("origin", "https://m.tiketkai.com")
+	req.Header.Add("priority", "u=1, i")
+	req.Header.Add("referer", "https://m.tiketkai.com/")
+	req.Header.Add("sec-ch-ua", "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\", \"Microsoft Edge\";v=\"144\"")
+	req.Header.Add("sec-ch-ua-mobile", "?0")
+	req.Header.Add("sec-ch-ua-platform", "\"Windows\"")
+	req.Header.Add("sec-fetch-dest", "empty")
+	req.Header.Add("sec-fetch-mode", "cors")
+	req.Header.Add("sec-fetch-site", "cross-site")
+	req.Header.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0")
+
+	client := &http.Client{Timeout: 45 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
 
-	var result struct {
-		Ok     bool                     `json:"ok"`
-		Result []map[string]interface{} `json:"result"`
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error: %d", resp.StatusCode)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+
+	// Read full body for debugging
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var result struct {
+		RC   string          `json:"rc"`
+		Data json.RawMessage `json:"data"` // Can be array or string
+	}
+
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		p.Logger.Error("Failed to parse response", "body", string(bodyBytes))
 		return nil, err
 	}
-	return result.Result, nil
-}
 
-// --- Command Handlers ---
-func handleCommands(ctx context.Context) {
-	logger.Debug("Polling for updates", "offset", LastUpdateID+1)
-	updates, err := getTelegramUpdates(ctx, LastUpdateID+1)
-	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			logger.Error("Error getting updates", "error", err)
-		}
-		return
+	if result.RC != "00" {
+		p.Logger.Error("TiketKai API error", "rc", result.RC, "body", string(bodyBytes))
+		return nil, fmt.Errorf("API RC: %s", result.RC)
 	}
 
-	if len(updates) > 0 {
-		logger.Info("Received updates", "count", len(updates))
+	// Check if data is a string (error message) or array
+	if len(result.Data) > 0 && result.Data[0] == '"' {
+		// Data is a string, likely an error message
+		var msg string
+		json.Unmarshal(result.Data, &msg)
+		return nil, fmt.Errorf("API message: %s", msg)
 	}
 
-	for _, update := range updates {
-		updateID := int64(update["update_id"].(float64))
-		if updateID > LastUpdateID {
-			LastUpdateID = updateID
-		}
-
-		message, ok := update["message"].(map[string]interface{})
-		if !ok {
-			logger.Debug("Skipping non-message update", "update_id", updateID)
-			continue
-		}
-
-		chat := message["chat"].(map[string]interface{})
-		chatID := fmt.Sprintf("%.0f", chat["id"].(float64))
-
-		text, ok := message["text"].(string)
-		if !ok {
-			continue
-		}
-
-		logger.Info("Received command", "chat_id", chatID, "text", text)
-
-		// Strip @botname suffix for group chat commands
-		cmdText := text
-		if idx := strings.Index(text, "@"); idx != -1 {
-			cmdText = text[:idx]
-		}
-
-		switch {
-		case strings.HasPrefix(cmdText, CmdCheck):
-			sendTelegramMessage("Initiating immediate train availability check...", chatID)
-			checkAllTrains(ctx)
-		case strings.HasPrefix(cmdText, CmdList):
-			handleListCommand(ctx, text, chatID)
-		case strings.HasPrefix(cmdText, CmdStatus):
-			handleStatusCommand(chatID)
-		case strings.HasPrefix(cmdText, CmdInterval):
-			handleIntervalCommand(text, chatID)
-		case strings.HasPrefix(cmdText, CmdToggle):
-			handleToggleCommand(text, chatID)
-		case strings.HasPrefix(cmdText, CmdFilter):
-			handleFilterCommand(text, chatID)
-		case strings.HasPrefix(cmdText, CmdMaxPrice):
-			handleMaxPriceCommand(text, chatID)
-		case strings.HasPrefix(cmdText, CmdStats):
-			handleStatsCommand(chatID)
-		case strings.HasPrefix(cmdText, CmdHelp):
-			handleHelpCommand(chatID)
-		}
-	}
-}
-
-func handleListCommand(ctx context.Context, text, chatID string) {
-	parts := strings.Split(text, " ")
-	trainIndex := 0
-
-	if len(parts) > 1 {
-		idx, err := strconv.Atoi(parts[1])
-		if err != nil || idx < 0 || idx >= len(Trains) {
-			sendTelegramMessage(fmt.Sprintf("Invalid train index. Use 0 to %d.", len(Trains)-1), chatID)
-			return
-		}
-		trainIndex = idx
+	// Parse data as array
+	var trainData []struct {
+		TrainName     string `json:"trainName"`
+		TrainNumber   string `json:"trainNumber"`
+		DepartureTime string `json:"departureTime"`
+		ArrivalTime   string `json:"arrivalTime"`
+		Seats         []struct {
+			Class        string      `json:"class"`
+			Availability interface{} `json:"availability"`
+			PriceAdult   interface{} `json:"priceAdult"`
+		} `json:"seats"`
 	}
 
-	if len(Trains) == 0 {
-		sendTelegramMessage("No train routes configured.", chatID)
-		return
+	if err := json.Unmarshal(result.Data, &trainData); err != nil {
+		return nil, fmt.Errorf("failed to parse train data: %w", err)
 	}
 
-	train := Trains[trainIndex]
-	sendTelegramMessage(fmt.Sprintf("Listing trains for %s to %s on %s...", train.Origin, train.Destination, train.Date), chatID)
-	listAvailableTrains(ctx, train.Origin, train.Destination, train.Date, chatID)
-}
+	var trains []common.Train
+	for _, tr := range trainData {
+		seatsAvailable := "0"
+		availStatus := "FULL"
+		minPrice := ""
 
-func handleStatusCommand(chatID string) {
-	trainMutex.RLock()
-	defer trainMutex.RUnlock()
+		for _, s := range tr.Seats {
+			// Check availability
+			isAvail := false
+			seatCount := "0"
 
-	enabledCount := 0
-	for _, t := range Trains {
-		if t.Enabled {
-			enabledCount++
-		}
-	}
-
-	msg := fmt.Sprintf("Bot is running.\nUptime: %s\nMonitoring: %d/%d trains\n",
-		time.Since(startTime).Round(time.Second), enabledCount, len(Trains))
-	sendTelegramMessage(msg, chatID)
-
-	trainStatus := "Train Status:\n\n"
-	for i, t := range Trains {
-		status := "✅ Enabled"
-		if !t.Enabled {
-			status = "❌ Disabled"
-		}
-		intervalMinutes := int(t.CheckInterval.Minutes())
-
-		filterInfo := ""
-		if len(t.FilterClass) > 0 {
-			filterInfo += fmt.Sprintf("\n  Classes: %s", strings.Join(t.FilterClass, ","))
-		}
-		if t.MaxPrice > 0 {
-			filterInfo += fmt.Sprintf("\n  Max Price: Rp%s", printer.Sprintf("%d", t.MaxPrice))
-		}
-
-		trainStatus += fmt.Sprintf("%d. %s: %s - Every %d min - Checked %d times%s\n",
-			i, t.Name, status, intervalMinutes, t.CheckCount, filterInfo)
-	}
-	sendTelegramMessage(trainStatus, chatID)
-}
-
-func handleIntervalCommand(text, chatID string) {
-	parts := strings.Split(text, " ")
-	if len(parts) != 3 {
-		sendTelegramMessage(fmt.Sprintf("Invalid format. Use %s <train_index> <minutes>", CmdInterval), chatID)
-		return
-	}
-
-	trainIndex, err := strconv.Atoi(parts[1])
-	if err != nil || trainIndex < 0 || trainIndex >= len(Trains) {
-		sendTelegramMessage(fmt.Sprintf("Invalid train index. Use 0 to %d.", len(Trains)-1), chatID)
-		return
-	}
-
-	minutes, err := strconv.Atoi(parts[2])
-	if err != nil || minutes <= 0 {
-		sendTelegramMessage("Interval must be a positive number of minutes.", chatID)
-		return
-	}
-
-	trainMutex.Lock()
-	Trains[trainIndex].CheckInterval = time.Duration(minutes) * time.Minute
-	trainMutex.Unlock()
-
-	sendTelegramMessage(fmt.Sprintf("✅ Check interval for train %d: %s updated to %d minutes.",
-		trainIndex, Trains[trainIndex].Name, minutes), chatID)
-	go saveState()
-}
-
-func handleToggleCommand(text, chatID string) {
-	parts := strings.Split(text, " ")
-	if len(parts) != 2 {
-		sendTelegramMessage(fmt.Sprintf("Invalid format. Use %s <index>", CmdToggle), chatID)
-		return
-	}
-
-	trainIndex, err := strconv.Atoi(parts[1])
-	if err != nil || trainIndex < 0 || trainIndex >= len(Trains) {
-		sendTelegramMessage(fmt.Sprintf("Invalid train index. Use 0 to %d.", len(Trains)-1), chatID)
-		return
-	}
-
-	trainMutex.Lock()
-	Trains[trainIndex].Enabled = !Trains[trainIndex].Enabled
-	status := "✅ enabled"
-	if !Trains[trainIndex].Enabled {
-		status = "❌ disabled"
-	}
-	trainMutex.Unlock()
-
-	t := Trains[trainIndex]
-	sendTelegramMessage(fmt.Sprintf("Train %d: %s (%s -> %s) is now %s.",
-		trainIndex, t.Name, t.Origin, t.Destination, status), chatID)
-	go saveState()
-}
-
-func handleFilterCommand(text, chatID string) {
-	parts := strings.SplitN(text, " ", 3)
-	if len(parts) != 3 {
-		sendTelegramMessage(fmt.Sprintf("Invalid format. Use %s <index> <classes>", CmdFilter), chatID)
-		return
-	}
-
-	trainIndex, err := strconv.Atoi(parts[1])
-	if err != nil || trainIndex < 0 || trainIndex >= len(Trains) {
-		sendTelegramMessage(fmt.Sprintf("Invalid train index. Use 0 to %d.", len(Trains)-1), chatID)
-		return
-	}
-
-	trainMutex.Lock()
-	classes := strings.ToUpper(parts[2])
-	if classes == "ALL" || classes == "NONE" {
-		Trains[trainIndex].FilterClass = nil
-		trainMutex.Unlock()
-		sendTelegramMessage(fmt.Sprintf("✅ Class filter removed for train %d: %s.", trainIndex, Trains[trainIndex].Name), chatID)
-	} else {
-		classList := strings.Split(classes, ",")
-		for i := range classList {
-			classList[i] = strings.TrimSpace(classList[i])
-		}
-		Trains[trainIndex].FilterClass = classList
-		trainMutex.Unlock()
-		sendTelegramMessage(fmt.Sprintf("✅ Class filter for train %d: %s set to: %s",
-			trainIndex, Trains[trainIndex].Name, strings.Join(classList, ", ")), chatID)
-	}
-	go saveState()
-}
-
-func handleMaxPriceCommand(text, chatID string) {
-	parts := strings.Split(text, " ")
-	if len(parts) != 3 {
-		sendTelegramMessage(fmt.Sprintf("Invalid format. Use %s <index> <price>", CmdMaxPrice), chatID)
-		return
-	}
-
-	trainIndex, err := strconv.Atoi(parts[1])
-	if err != nil || trainIndex < 0 || trainIndex >= len(Trains) {
-		sendTelegramMessage(fmt.Sprintf("Invalid train index. Use 0 to %d.", len(Trains)-1), chatID)
-		return
-	}
-
-	trainMutex.Lock()
-	priceStr := strings.ToUpper(parts[2])
-	if priceStr == "NONE" || priceStr == "0" {
-		Trains[trainIndex].MaxPrice = 0
-		trainMutex.Unlock()
-		sendTelegramMessage(fmt.Sprintf("✅ Price filter removed for train %d: %s.", trainIndex, Trains[trainIndex].Name), chatID)
-	} else {
-		price, err := strconv.Atoi(priceStr)
-		if err != nil || price < 0 {
-			trainMutex.Unlock()
-			sendTelegramMessage("Max price must be a positive number or 0 to disable.", chatID)
-			return
-		}
-		Trains[trainIndex].MaxPrice = price
-		trainMutex.Unlock()
-		sendTelegramMessage(fmt.Sprintf("✅ Max price for train %d: %s set to: Rp%s",
-			trainIndex, Trains[trainIndex].Name, printer.Sprintf("%d", price)), chatID)
-	}
-	go saveState()
-}
-
-func handleStatsCommand(chatID string) {
-	trainMutex.RLock()
-	defer trainMutex.RUnlock()
-
-	msg := fmt.Sprintf("📊 Train Check Statistics\n\nUptime: %s\n\n", time.Since(startTime).Round(time.Second))
-	totalChecks := 0
-	for i, t := range Trains {
-		msg += fmt.Sprintf("%d. %s: %d checks\n", i, t.Name, t.CheckCount)
-		totalChecks += t.CheckCount
-	}
-	msg += fmt.Sprintf("\nTotal checks: %d", totalChecks)
-	sendTelegramMessage(msg, chatID)
-}
-
-func handleHelpCommand(chatID string) {
-	trainMutex.RLock()
-	enabledCount := 0
-	for _, t := range Trains {
-		if t.Enabled {
-			enabledCount++
-		}
-	}
-	trainMutex.RUnlock()
-
-	helpMessage := fmt.Sprintf(`🚂 Train Checker Bot Commands
-
-Monitoring %d/%d trains | Uptime: %s
-Health: http://localhost%s/health
-
-📋 Commands:
-%s - Check all trains now
-%s [index] - List available trains
-%s - Show bot status
-%s <index> <minutes> - Set check interval
-%s <index> - Toggle train
-%s <index> <classes> - Set class filter
-%s <index> <price> - Set max price
-%s - Show statistics
-%s - Show this help
-`, enabledCount, len(Trains), time.Since(startTime).Round(time.Second), HealthPort,
-		CmdCheck, CmdList, CmdStatus, CmdInterval, CmdToggle, CmdFilter, CmdMaxPrice, CmdStats, CmdHelp)
-
-	sendTelegramMessage(helpMessage, chatID)
-
-	trainsMessage := "📍 Monitored Trains:\n\n"
-	trainMutex.RLock()
-	for i, t := range Trains {
-		status := "✅"
-		if !t.Enabled {
-			status = "❌"
-		}
-		intervalMinutes := int(t.CheckInterval.Minutes())
-
-		filterInfo := ""
-		if len(t.FilterClass) > 0 {
-			filterInfo += fmt.Sprintf(" | Classes: %s", strings.Join(t.FilterClass, ","))
-		}
-		if t.MaxPrice > 0 {
-			filterInfo += fmt.Sprintf(" | Max: Rp%s", printer.Sprintf("%d", t.MaxPrice))
-		}
-
-		trainsMessage += fmt.Sprintf("%d. %s %s: %s -> %s (%s) - Every %d min - %d checks%s\n",
-			i, status, t.Name, t.Origin, t.Destination, t.Date, intervalMinutes, t.CheckCount, filterInfo)
-	}
-	trainMutex.RUnlock()
-	sendTelegramMessage(trainsMessage, chatID)
-}
-
-// --- Scraper Functions ---
-func listAvailableTrains(ctx context.Context, origin, destination, date, chatID string) {
-	payload := SearchPayload{
-		App:         "TKAI",
-		Via:         "mobile_web",
-		Date:        date,
-		Destination: destination,
-		Origin:      origin,
-		ProductCode: "WKAI",
-		DeviceInfo: DevInfo{
-			Model:       "Windows NT 10.0",
-			VersionCode: 10037,
-			VersionName: "1.3.0",
-		},
-	}
-
-	jsonPayload, _ := json.Marshal(payload)
-	encryptedData, err := encryptAESBase64(string(jsonPayload), Key, IV)
-	if err != nil {
-		sendTelegramMessage(fmt.Sprintf("Encryption error: %v", err), chatID)
-		return
-	}
-
-	var data TiketResponse
-	err = retryWithBackoff(ctx, func() error {
-		limiter.Wait(ctx)
-
-		client := &http.Client{Timeout: 30 * time.Second}
-		req, _ := http.NewRequestWithContext(ctx, "POST", TiketKaiAPIUrl, strings.NewReader(encryptedData))
-		req.Header.Set("Content-Type", "text/plain")
-		req.Header.Set("User-Agent", UserAgent)
-		req.Header.Set("Origin", "https://m.tiketkai.com")
-		req.Header.Set("Referer", "https://m.tiketkai.com/")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return json.Unmarshal(bodyBytes, &data)
-	}, MaxRetries)
-
-	if err != nil {
-		sendTelegramMessage(fmt.Sprintf("Network Error: %v", err), chatID)
-		return
-	}
-
-	if data.RC != "00" {
-		sendTelegramMessage(fmt.Sprintf("API Error: %s", data.RD), chatID)
-		return
-	}
-
-	if len(data.Data) == 0 {
-		sendTelegramMessage(fmt.Sprintf("No trains found for %s from %s to %s.", date, origin, destination), chatID)
-		return
-	}
-
-	trainGroups := make(map[string][]TrainData)
-	for _, train := range data.Data {
-		trainGroups[train.TrainName] = append(trainGroups[train.TrainName], train)
-	}
-
-	message := fmt.Sprintf("🚂 Available Trains\nDate: %s\nRoute: %s -> %s\n\n", date, origin, destination)
-
-	for trainName, trainList := range trainGroups {
-		firstTrain := trainList[0]
-		message += fmt.Sprintf("🚂 %s\n", trainName)
-		message += fmt.Sprintf("📅 Departure: %s on %s\n", firstTrain.DepartureTime, firstTrain.DepartureDate)
-		message += fmt.Sprintf("📅 Arrival: %s on %s\n", firstTrain.ArrivalTime, firstTrain.ArrivalDate)
-		message += fmt.Sprintf("⏱ Duration: %s\n", firstTrain.Duration)
-		message += "💺 Available Classes:\n"
-
-		for _, train := range trainList {
-			for _, seat := range train.Seats {
-				avail := parseFloat(seat.Availability)
-				price := parseFloat(seat.PriceAdult)
-				availStatus := "❌ Sold Out"
-				if avail > 0 {
-					availStatus = fmt.Sprintf("✅ %.0f seats", avail)
+			switch v := s.Availability.(type) {
+			case float64:
+				if v > 0 {
+					isAvail = true
+					seatCount = fmt.Sprintf("%.0f", v)
 				}
-				message += fmt.Sprintf("  - Class %s: %s, Rp%s\n", seat.Class, availStatus, printer.Sprintf("%.0f", price))
-			}
-		}
-		message += "\n"
-
-		if len(message) > 3500 {
-			sendTelegramMessage(message, chatID)
-			message = "Continued...\n\n"
-		}
-	}
-
-	if message != "Continued...\n\n" {
-		sendTelegramMessage(message, chatID)
-	}
-}
-
-func checkTrainAvailability(ctx context.Context, t *TrainConfig) bool {
-	trainMutex.Lock()
-	t.CheckCount++
-	trainMutex.Unlock()
-
-	logger.Info("Checking train", "name", t.Name, "date", t.Date, "origin", t.Origin, "destination", t.Destination)
-
-	payload := SearchPayload{
-		App:         "TKAI",
-		Via:         "mobile_web",
-		Date:        t.Date,
-		Destination: t.Destination,
-		Origin:      t.Origin,
-		ProductCode: "WKAI",
-		DeviceInfo: DevInfo{
-			Model:       "Windows NT 10.0",
-			VersionCode: 10037,
-			VersionName: "1.3.0",
-		},
-	}
-
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		logger.Error("Error marshaling payload", "error", err)
-		return false
-	}
-
-	encryptedData, err := encryptAESBase64(string(jsonPayload), Key, IV)
-	if err != nil {
-		logger.Error("Error encrypting payload", "error", err)
-		return false
-	}
-
-	var responseData TiketResponse
-	err = retryWithBackoff(ctx, func() error {
-		limiter.Wait(ctx)
-
-		req, _ := http.NewRequestWithContext(ctx, "POST", TiketKaiAPIUrl, strings.NewReader(encryptedData))
-		req.Header.Set("Content-Type", "text/plain")
-		req.Header.Set("User-Agent", UserAgent)
-		req.Header.Set("Origin", "https://m.tiketkai.com")
-		req.Header.Set("Referer", "https://m.tiketkai.com/")
-
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			return fmt.Errorf("API returned status: %d", resp.StatusCode)
-		}
-
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return json.Unmarshal(bodyBytes, &responseData)
-	}, MaxRetries)
-
-	if err != nil {
-		logger.Error("Failed to check train", "name", t.Name, "error", err)
-		return false
-	}
-
-	if responseData.RC != "00" {
-		logger.Warn("API error", "name", t.Name, "error", responseData.RD)
-		return false
-	}
-
-	logger.Info("Train check successful", "name", t.Name)
-
-	seatsFound := false
-	foundTargetTrain := false
-
-	for _, train := range responseData.Data {
-		if train.TrainName != t.Name {
-			continue
-		}
-		foundTargetTrain = true
-
-		for _, seat := range train.Seats {
-			avail := parseFloat(seat.Availability)
-			if avail <= 0 {
-				continue
-			}
-
-			seatClass := strings.ToUpper(seat.Class)
-
-			if len(t.FilterClass) > 0 {
-				found := false
-				for _, fc := range t.FilterClass {
-					if strings.ToUpper(fc) == seatClass {
-						found = true
-						break
-					}
-				}
-				if !found {
-					continue
+			case string:
+				if v != "0" && v != "Habis" && v != "" {
+					isAvail = true
+					seatCount = v
 				}
 			}
 
-			price := parseFloat(seat.PriceAdult)
-			if t.MaxPrice > 0 && int(price) > t.MaxPrice {
-				continue
-			}
+			if isAvail {
+				seatsAvailable = seatCount
+				availStatus = "AVAILABLE"
 
-			seatsFound = true
-
-			filterInfo := ""
-			if len(t.FilterClass) > 0 {
-				filterInfo += fmt.Sprintf("\nFiltered by class: %s", strings.Join(t.FilterClass, ", "))
-			}
-			if t.MaxPrice > 0 {
-				filterInfo += fmt.Sprintf("\nMax price: Rp%s", printer.Sprintf("%d", t.MaxPrice))
-			}
-
-			msg := fmt.Sprintf(`🎫 %s Train Ticket Alert! @muammarmufid @SCCAMUS
-
-📅 Date: %s
-🚂 Route: %s -> %s
-🔢 Train Number: %s
-🕐 Departure: %s on %s
-🕐 Arrival: %s on %s
-⏱ Duration: %s
-💺 Class: %s
-✅ Availability: %.0f seats
-💰 Price: Rp%s%s
-
-🔗 Book now: https://m.tiketkai.com/`,
-				t.Name, t.Date, t.Origin, t.Destination, train.TrainNumber,
-				train.DepartureTime, train.DepartureDate, train.ArrivalTime, train.ArrivalDate,
-				train.Duration, seatClass, avail, printer.Sprintf("%.0f", price), filterInfo)
-
-			logger.Info("Found ticket!", "train", t.Name, "class", seatClass, "seats", avail, "price", price)
-			sendTelegramMessage(msg)
-		}
-	}
-
-	if !foundTargetTrain {
-		logger.Debug("Train not found in results", "name", t.Name)
-	} else if !seatsFound {
-		logger.Debug("No matching seats available", "name", t.Name)
-	}
-
-	return seatsFound
-}
-
-func checkAllTrains(ctx context.Context) {
-	var wg sync.WaitGroup
-	trainMutex.RLock()
-	for _, t := range Trains {
-		if t.Enabled {
-			wg.Add(1)
-			go func(tc *TrainConfig) {
-				defer wg.Done()
-				checkTrainAvailability(ctx, tc)
-			}(t)
-		}
-	}
-	trainMutex.RUnlock()
-	wg.Wait()
-	go saveState()
-}
-
-// --- Utility Functions ---
-func parseFloat(v interface{}) float64 {
-	switch val := v.(type) {
-	case float64:
-		return val
-	case string:
-		f, _ := strconv.ParseFloat(val, 64)
-		return f
-	case int:
-		return float64(val)
-	default:
-		return 0
-	}
-}
-
-func loadTrainsFromEnv() {
-	for i := 1; i <= 10; i++ {
-		prefix := fmt.Sprintf("TRAIN_%d_", i)
-		name := os.Getenv(prefix + "NAME")
-		if name == "" {
-			continue
-		}
-
-		interval, _ := strconv.Atoi(os.Getenv(prefix + "INTERVAL"))
-		if interval == 0 {
-			interval = 180
-		}
-
-		enabled := strings.ToLower(os.Getenv(prefix+"ENABLED")) != "false"
-		maxPrice, _ := strconv.Atoi(os.Getenv(prefix + "MAX_PRICE"))
-
-		filterClassStr := os.Getenv(prefix + "FILTER_CLASS")
-		var filterClass []string
-		if filterClassStr != "" {
-			parts := strings.Split(filterClassStr, ",")
-			for _, p := range parts {
-				trimmed := strings.TrimSpace(p)
-				if trimmed != "" {
-					filterClass = append(filterClass, strings.ToUpper(trimmed))
+				// Price
+				price := "0"
+				switch v := s.PriceAdult.(type) {
+				case float64:
+					price = fmt.Sprintf("%.0f", v)
+				case string:
+					price = v
 				}
+				minPrice = price // Use first available class price
+				break            // Take the first available class
 			}
 		}
 
-		t := &TrainConfig{
-			Index:         i - 1,
-			Name:          name,
-			Origin:        os.Getenv(prefix + "ORIGIN"),
-			Destination:   os.Getenv(prefix + "DESTINATION"),
-			Date:          os.Getenv(prefix + "DATE"),
-			Enabled:       enabled,
-			CheckInterval: time.Duration(interval) * time.Second,
-			FilterClass:   filterClass,
-			MaxPrice:      maxPrice,
+		if availStatus == "AVAILABLE" {
+			trains = append(trains, common.Train{
+				Name:          tr.TrainName,
+				Class:         "ECO", // Simplified
+				Price:         minPrice,
+				DepartureTime: tr.DepartureTime,
+				ArrivalTime:   tr.ArrivalTime,
+				Availability:  availStatus,
+				SeatsLeft:     seatsAvailable,
+			})
 		}
-		Trains = append(Trains, t)
-		logger.Info("Loaded train", "index", i, "name", t.Name, "origin", t.Origin, "destination", t.Destination, "date", t.Date)
 	}
+
+	// Filter by TrainName if configured
+	if p.TrainName != "" {
+		var filtered []common.Train
+		target := strings.ToLower(p.TrainName)
+		for _, t := range trains {
+			if strings.Contains(strings.ToLower(t.Name), target) {
+				filtered = append(filtered, t)
+			}
+		}
+		return filtered, nil
+	}
+
+	return trains, nil
 }
 
-// Run starts the TiketKai train ticket checker bot with Telegram integration
-func Run() {
-	logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	slog.SetDefault(logger)
+// SearchAll returns all trains (no TrainName filter)
+func (p *Provider) SearchAll(ctx context.Context) ([]common.Train, error) {
+	// Temporarily clear TrainName to get all trains
+	savedName := p.TrainName
+	p.TrainName = ""
+	defer func() { p.TrainName = savedName }()
+	return p.Search(ctx)
+}
 
-	// Check for --reset flag
-	for _, arg := range os.Args[1:] {
-		if arg == "--reset" || arg == "-reset" {
-			logger.Info("Reset flag detected, clearing saved state")
-			os.Remove(getStateFilePath())
-		}
+func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(string)) {
+	interval := p.CheckInterval
+	if interval == 0 {
+		interval = 1 * time.Minute
 	}
 
-	startTime = time.Now()
-	limiter = rate.NewLimiter(rate.Limit(RequestsPerSecond), RequestsPerSecond*2)
-
-	_ = godotenv.Load()
-	if os.Getenv("TELEGRAM_BOT_TOKEN") == "" {
-		_ = godotenv.Load("decryptor/.env")
-	}
-	if os.Getenv("TELEGRAM_BOT_TOKEN") == "" {
-		_ = godotenv.Load("example.env")
-	}
-
-	TeleToken = os.Getenv("TELEGRAM_BOT_TOKEN")
-
-	chatIDStr := os.Getenv("TELEGRAM_CHAT_ID")
-	if chatIDStr != "" {
-		for _, id := range strings.Split(chatIDStr, ",") {
-			trimmed := strings.TrimSpace(id)
-			if trimmed != "" {
-				TeleChatIDs = append(TeleChatIDs, trimmed)
-			}
-		}
-	}
-
-	if TeleToken == "" {
-		logger.Error("TELEGRAM_BOT_TOKEN not set")
-		os.Exit(1)
-	}
-
-	loadTrainsFromEnv()
-
-	if len(Trains) == 0 {
-		logger.Error("No trains configured")
-		os.Exit(1)
-	}
-
-	if err := loadState(); err != nil {
-		logger.Warn("Failed to load state", "error", err)
-	}
-
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
-
-	go startHealthServer(ctx)
-
-	enabledCount := 0
-	for _, t := range Trains {
-		if t.Enabled {
-			enabledCount++
-		}
-	}
-
-	startupMsg := fmt.Sprintf(`🚂 Train Ticket Checker Starting! @muammarmufid
-📊 Monitoring %d trains (%d enabled)
-🌐 Health: http://localhost%s/health
-
-Use %s to see all commands.`, len(Trains), enabledCount, HealthPort, CmdHelp)
-	sendTelegramMessage(startupMsg)
-
-	logger.Info("Bot started", "trains", len(Trains), "enabled", enabledCount)
-
-	logger.Info("Performing initial train availability check...")
-	checkAllTrains(ctx)
-	now := time.Now()
-	for _, t := range Trains {
-		t.LastCheck = now
-	}
-
-	ticker := time.NewTicker(TelegramPollingInterval)
+	p.Logger.Info("Starting TiketKai Polling", "interval", interval, "target", p.TrainName)
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Info("Shutting down gracefully...")
-			sendTelegramMessage("🛑 Bot shutting down...")
-			if err := saveState(); err != nil {
-				logger.Error("Failed to save state", "error", err)
-			} else {
-				logger.Info("State saved successfully")
-			}
 			return
-
 		case <-ticker.C:
-			handleCommands(ctx)
+			trains, err := p.Search(ctx)
+			if err != nil {
+				p.Logger.Error("Poll failed", "error", err)
+				continue
+			}
 
-			now := time.Now()
-			trainMutex.RLock()
-			for _, t := range Trains {
-				if t.Enabled && now.Sub(t.LastCheck) >= t.CheckInterval {
-					go func(tc *TrainConfig) {
-						checkTrainAvailability(ctx, tc)
-						trainMutex.Lock()
-						tc.LastCheck = time.Now()
-						trainMutex.Unlock()
-					}(t)
+			// Filter for trains with available seats only
+			var availableTrains []common.Train
+			for _, t := range trains {
+				if t.SeatsLeft != "0" && t.SeatsLeft != "" {
+					availableTrains = append(availableTrains, t)
 				}
 			}
-			trainMutex.RUnlock()
+
+			if len(availableTrains) > 0 {
+				msg := fmt.Sprintf("🚂 Target Train Available! (%d found)\n", len(availableTrains))
+				for _, t := range availableTrains {
+					msg += fmt.Sprintf("- %s: %s seats (Rp%s)\n", t.Name, t.SeatsLeft, t.Price)
+				}
+				notifyFunc(msg)
+			}
 		}
 	}
+}
+
+// Init handles legacy boilerplate compatibility (now empty)
+func Init(ctx context.Context) error {
+	return nil
+}
+
+// Helpers
+func encryptAESBase64(plaintext string, key, iv string) (string, error) {
+	block, err := aes.NewCipher([]byte(key))
+	if err != nil {
+		return "", err
+	}
+
+	// PKCS7 Padding
+	bs := block.BlockSize()
+	padding := bs - len(plaintext)%bs
+	padtext := bytes.Repeat([]byte{byte(padding)}, padding)
+	plaintextBytes := append([]byte(plaintext), padtext...)
+
+	mode := cipher.NewCBCEncrypter(block, []byte(iv))
+	ciphertext := make([]byte, len(plaintextBytes))
+	mode.CryptBlocks(ciphertext, plaintextBytes)
+
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
 }

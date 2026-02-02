@@ -1,1 +1,4 @@
 /tiketkai.env
+.env
+cmd.exe
+cloudflared.exe

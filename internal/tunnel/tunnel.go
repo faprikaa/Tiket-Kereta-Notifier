@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -77,9 +78,12 @@ func (t *Tunnel) Start(ctx context.Context, localURL string) (string, error) {
 
 			// Look for the tunnel URL
 			if matches := urlRegex.FindString(line); matches != "" {
-				select {
-				case urlChan <- matches:
-				default:
+				// Ignore Cloudflare API endpoint logs
+				if !strings.Contains(matches, "api.trycloudflare.com") {
+					select {
+					case urlChan <- matches:
+					default:
+					}
 				}
 			}
 
@@ -99,6 +103,10 @@ func (t *Tunnel) Start(ctx context.Context, localURL string) (string, error) {
 		t.URL = url
 		t.started = true
 		t.logger.Info("Tunnel started", "public_url", url)
+		// Wait for tunnel to be accessible
+		if err := t.waitForReady(url, 30*time.Second); err != nil {
+			t.logger.Warn("Tunnel health check failed, proceeding anyway", "error", err)
+		}
 		return url, nil
 	case err := <-errChan:
 		t.Stop()
@@ -149,4 +157,36 @@ func (t *Tunnel) GetURL() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.URL
+}
+
+// waitForReady polls the tunnel URL until it's accessible via HTTP
+func (t *Tunnel) waitForReady(url string, timeout time.Duration) error {
+	t.logger.Info("Waiting for tunnel to be accessible...")
+
+	// Wait 5 seconds for DNS propagation before starting health checks
+	t.logger.Debug("Waiting 5 seconds for DNS propagation...")
+	time.Sleep(5 * time.Second)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	healthURL := url + "/health"
+
+	deadline := time.Now().Add(timeout)
+	attempt := 0
+
+	for time.Now().Before(deadline) {
+		attempt++
+		resp, err := client.Get(healthURL)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == 200 {
+				t.logger.Info("Tunnel is ready!", "attempts", attempt)
+				return nil
+			}
+		}
+
+		t.logger.Debug("Tunnel not ready yet", "attempt", attempt, "error", err)
+		time.Sleep(1 * time.Second)
+	}
+
+	return fmt.Errorf("tunnel not accessible after %v", timeout)
 }
