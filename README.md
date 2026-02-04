@@ -178,7 +178,7 @@ sequenceDiagram
 | `/check` | Check target train (berdasarkan TRAIN_NAME) |
 | `/list` | List semua kereta tersedia (tanpa filter) |
 | `/history [n]` | Tampilkan n hasil check terakhir (default 3) |
-| `/status` | Status bot dan provider |
+| `/status` | Status detail: uptime, total checks, last check, target info |
 | `/help` | Bantuan |
 
 ## How It Works

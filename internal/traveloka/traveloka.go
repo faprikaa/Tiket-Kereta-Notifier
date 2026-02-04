@@ -29,6 +29,14 @@ type Provider struct {
 	TrainName     string        // Optional: specific train to monitor
 	CheckInterval time.Duration // Polling interval
 	history       *history.Store
+	// Status tracking
+	startTime        time.Time
+	totalChecks      int
+	successfulChecks int
+	failedChecks     int
+	lastCheckTime    time.Time
+	lastCheckFound   bool
+	lastCheckError   string
 }
 
 // NewProvider creates a new Traveloka provider
@@ -46,6 +54,7 @@ func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int,
 		CheckInterval: interval,
 		Logger:        logger,
 		history:       history.NewStore(100),
+		startTime:     time.Now(),
 	}
 }
 
@@ -66,9 +75,15 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			p.totalChecks++
+			p.lastCheckTime = time.Now()
+
 			p.Logger.Debug("Scheduler checking Traveloka...")
 			trains, err := p.Search(ctx)
 			if err != nil {
+				p.failedChecks++
+				p.lastCheckError = err.Error()
+				p.lastCheckFound = false
 				// Record error in history
 				p.history.Add(common.CheckResult{
 					Timestamp: time.Now(),
@@ -76,6 +91,9 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 				})
 				continue
 			}
+
+			p.successfulChecks++
+			p.lastCheckError = ""
 
 			// Filter for AVAILABLE trains only for notification
 			var availableTrains []common.Train
@@ -85,6 +103,8 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 					availableTrains = append(availableTrains, t)
 				}
 			}
+
+			p.lastCheckFound = len(availableTrains) > 0
 
 			// Record result in history
 			p.history.Add(common.CheckResult{
@@ -107,6 +127,24 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 // GetHistory returns the last N check results
 func (p *Provider) GetHistory(n int) []common.CheckResult {
 	return p.history.GetLast(n)
+}
+
+// GetStatus returns the current status of the provider
+func (p *Provider) GetStatus() common.ProviderStatus {
+	return common.ProviderStatus{
+		StartTime:        p.startTime,
+		TotalChecks:      p.totalChecks,
+		SuccessfulChecks: p.successfulChecks,
+		FailedChecks:     p.failedChecks,
+		LastCheckTime:    p.lastCheckTime,
+		LastCheckFound:   p.lastCheckFound,
+		LastCheckError:   p.lastCheckError,
+		Origin:           p.Origin,
+		Destination:      p.Destination,
+		Date:             fmt.Sprintf("%d-%02d-%02d", p.Year, p.Month, p.Day),
+		TrainName:        p.TrainName,
+		Interval:         p.CheckInterval,
+	}
 }
 
 // Search performs a train search using Traveloka API
