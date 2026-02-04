@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"tiket-kereta-notifier/internal/common"
 	"tiket-kereta-notifier/internal/telegram"
@@ -84,7 +85,66 @@ func RegisterCommands(bot *telegram.Bot, provider common.Provider) {
 
 	// Command: /status
 	bot.RegisterCommand("/status", func(ctx context.Context, chatID, args string) {
-		telegram.SendMessage(fmt.Sprintf("🤖 Provider: %s\n✅ Bot is running properly.", provider.Name()), chatID)
+		status := provider.GetStatus()
+
+		// Calculate uptime
+		uptime := time.Since(status.StartTime)
+		uptimeStr := formatDuration(uptime)
+
+		// Format last check
+		lastCheckStr := "Never"
+		lastCheckResultStr := "N/A"
+		if !status.LastCheckTime.IsZero() {
+			lastCheckStr = fmt.Sprintf("%s ago", formatDuration(time.Since(status.LastCheckTime)))
+			if status.LastCheckError != "" {
+				lastCheckResultStr = fmt.Sprintf("❌ Error: %s", status.LastCheckError)
+			} else if status.LastCheckFound {
+				lastCheckResultStr = "✅ Found available seats!"
+			} else {
+				lastCheckResultStr = "⛔ No seats available"
+			}
+		}
+
+		// Format target train
+		targetStr := "All trains"
+		if status.TrainName != "" {
+			targetStr = status.TrainName
+		}
+
+		msg := fmt.Sprintf(`🤖 Bot Status
+
+📊 Provider: %s
+⏱️ Uptime: %s
+
+📈 Statistics:
+• Total Checks: %d
+• Successful: %d
+• Failed: %d
+
+🔍 Last Check:
+• When: %s
+• Result: %s
+
+🎯 Target:
+• Route: %s → %s
+• Date: %s
+• Train: %s
+• Interval: %s`,
+			provider.Name(),
+			uptimeStr,
+			status.TotalChecks,
+			status.SuccessfulChecks,
+			status.FailedChecks,
+			lastCheckStr,
+			lastCheckResultStr,
+			status.Origin,
+			status.Destination,
+			status.Date,
+			targetStr,
+			status.Interval.String(),
+		)
+
+		telegram.SendMessage(msg, chatID)
 	})
 
 	// Command: /history [n]
@@ -140,8 +200,26 @@ func RegisterCommands(bot *telegram.Bot, provider common.Provider) {
 /check - Check availability manual
 /list - List all monitored trains
 /history [n] - Show last n checks (default 3)
-/status - Check bot status
+/status - Show detailed bot status
 /help - Show this message`, provider.Name())
 		telegram.SendMessage(help, chatID)
 	})
+}
+
+// formatDuration formats a duration into a human readable string
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Second)
+	h := d / time.Hour
+	d -= h * time.Hour
+	m := d / time.Minute
+	d -= m * time.Minute
+	s := d / time.Second
+
+	if h > 0 {
+		return fmt.Sprintf("%dh %dm %ds", h, m, s)
+	}
+	if m > 0 {
+		return fmt.Sprintf("%dm %ds", m, s)
+	}
+	return fmt.Sprintf("%ds", s)
 }

@@ -33,6 +33,14 @@ type Provider struct {
 	TrainName     string // Target train name filter
 	CheckInterval time.Duration
 	history       *history.Store
+	// Status tracking
+	startTime        time.Time
+	totalChecks      int
+	successfulChecks int
+	failedChecks     int
+	lastCheckTime    time.Time
+	lastCheckFound   bool
+	lastCheckError   string
 }
 
 // NewProvider creates a new TiketKai provider
@@ -45,6 +53,7 @@ func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, inte
 		TrainName:     trainName,
 		CheckInterval: interval,
 		history:       history.NewStore(100),
+		startTime:     time.Now(),
 	}
 }
 
@@ -252,9 +261,15 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(string)) 
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			p.totalChecks++
+			p.lastCheckTime = time.Now()
+
 			trains, err := p.Search(ctx)
 			if err != nil {
 				p.Logger.Error("Poll failed", "error", err)
+				p.failedChecks++
+				p.lastCheckError = err.Error()
+				p.lastCheckFound = false
 				// Record error in history
 				p.history.Add(common.CheckResult{
 					Timestamp: time.Now(),
@@ -263,6 +278,9 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(string)) 
 				continue
 			}
 
+			p.successfulChecks++
+			p.lastCheckError = ""
+
 			// Filter for trains with available seats only
 			var availableTrains []common.Train
 			for _, t := range trains {
@@ -270,6 +288,8 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(string)) 
 					availableTrains = append(availableTrains, t)
 				}
 			}
+
+			p.lastCheckFound = len(availableTrains) > 0
 
 			// Record result in history
 			p.history.Add(common.CheckResult{
@@ -292,6 +312,24 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(string)) 
 // GetHistory returns the last N check results
 func (p *Provider) GetHistory(n int) []common.CheckResult {
 	return p.history.GetLast(n)
+}
+
+// GetStatus returns the current status of the provider
+func (p *Provider) GetStatus() common.ProviderStatus {
+	return common.ProviderStatus{
+		StartTime:        p.startTime,
+		TotalChecks:      p.totalChecks,
+		SuccessfulChecks: p.successfulChecks,
+		FailedChecks:     p.failedChecks,
+		LastCheckTime:    p.lastCheckTime,
+		LastCheckFound:   p.lastCheckFound,
+		LastCheckError:   p.lastCheckError,
+		Origin:           p.Origin,
+		Destination:      p.Destination,
+		Date:             p.Date,
+		TrainName:        p.TrainName,
+		Interval:         p.CheckInterval,
+	}
 }
 
 // Init handles legacy boilerplate compatibility (now empty)

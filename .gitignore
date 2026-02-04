@@ -2,3 +2,4 @@
 .env
 cmd.exe
 cloudflared.exe
+main.exe

@@ -24,20 +24,28 @@ type CheckResult struct {
 	Error           string
 }
 
+// ProviderStatus contains status information for a provider
+type ProviderStatus struct {
+	StartTime        time.Time
+	TotalChecks      int
+	SuccessfulChecks int
+	FailedChecks     int
+	LastCheckTime    time.Time
+	LastCheckFound   bool
+	LastCheckError   string
+	Origin           string
+	Destination      string
+	Date             string
+	TrainName        string
+	Interval         time.Duration
+}
+
 // Provider defines the standard interface for train search providers
 type Provider interface {
-	// Search checks for train availability (may filter by configured train name)
 	Search(ctx context.Context) ([]Train, error)
-
-	// SearchAll returns all trains without filtering
 	SearchAll(ctx context.Context) ([]Train, error)
-
-	// Name returns the provider name
 	Name() string
-
-	// StartScheduler starts the provider's internal monitoring loop
 	StartScheduler(ctx context.Context, notifyFunc func(message string))
-
-	// GetHistory returns the last N check results
 	GetHistory(n int) []CheckResult
+	GetStatus() ProviderStatus
 }
