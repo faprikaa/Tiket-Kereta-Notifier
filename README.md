@@ -12,6 +12,7 @@ Bot Telegram untuk monitoring ketersediaan tiket kereta api dari TiketKai, Trave
 - ✅ **Smart Notification** - Hanya kirim notifikasi ketika ada kursi tersedia
 - ✅ **Startup Notification** - Notifikasi saat bot berhasil start
 - ✅ **Captcha Detection** - Deteksi Turnstile/Captcha untuk Tiket.com
+- ✅ **History** - Lihat riwayat N check terakhir via `/history`
 
 ## Installation
 
@@ -115,12 +116,68 @@ Webhook mode akan:
 4. Terima updates langsung via HTTP POST
 5. Kirim notifikasi startup ke Telegram
 
+## Architecture
+
+```mermaid
+graph TB
+    subgraph "Train Ticket Notifier"
+        Main[main.go] --> Config[Config Loader]
+        Main --> Provider{Provider Factory}
+        
+        Provider --> TiketKai[TiketKai Provider]
+        Provider --> Traveloka[Traveloka Provider]
+        Provider --> TiketCom[Tiket.com Provider]
+        
+        TiketKai --> |AES Encrypted| TKAI_API[(TiketKai API)]
+        Traveloka --> |JSON| TVL_API[(Traveloka API)]
+        TiketCom --> |curl_chrome110| TKT_API[(Tiket.com API)]
+        
+        Main --> Scheduler[Scheduler]
+        Scheduler --> |Check Availability| Provider
+        
+        Main --> TGBot[Telegram Bot]
+        TGBot --> |Commands| Provider
+    end
+    
+    subgraph "External Services"
+        TGBot <--> |Webhook| Cloudflared[Cloudflare Tunnel]
+        Cloudflared <--> Telegram[Telegram API]
+    end
+    
+    Scheduler --> |Notify| Telegram
+```
+
+### Scheduler Flow
+
+```mermaid
+sequenceDiagram
+    participant S as Scheduler
+    participant P as Provider
+    participant API as Train API
+    participant T as Telegram
+
+    loop Every TRAIN_INTERVAL
+        S->>P: Search()
+        P->>API: Request train data
+        API-->>P: Train list
+        P-->>S: Available trains
+        
+        alt Seats Available
+            S->>T: Send notification
+            T-->>S: Message sent
+        else No Seats
+            Note over S: Skip notification
+        end
+    end
+```
+
 ## Telegram Commands
 
 | Command | Description |
 |---------|-------------|
 | `/check` | Check target train (berdasarkan TRAIN_NAME) |
 | `/list` | List semua kereta tersedia (tanpa filter) |
+| `/history [n]` | Tampilkan n hasil check terakhir (default 3) |
 | `/status` | Status bot dan provider |
 | `/help` | Bantuan |
 
@@ -143,8 +200,9 @@ Webhook mode akan:
 │   └── test.go              # Test utilities
 ├── internal/
 │   ├── bot/                 # Bot commands registration
-│   ├── common/              # Shared interfaces (Provider, Train)
+│   ├── common/              # Shared interfaces (Provider, Train, CheckResult)
 │   ├── config/              # Environment loading & validation
+│   ├── history/             # History storage for check results
 │   ├── telegram/            # Telegram bot + webhook
 │   ├── tiketcom/            # Tiket.com provider (curl-impersonate)
 │   ├── tiketkai/            # TiketKai provider

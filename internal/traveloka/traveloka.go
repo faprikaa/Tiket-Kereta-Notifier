@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"tiket-kereta-notifier/internal/common"
+	"tiket-kereta-notifier/internal/history"
 )
 
 // APIUrl is the Traveloka train search API endpoint
@@ -27,6 +28,7 @@ type Provider struct {
 	Logger        *slog.Logger
 	TrainName     string        // Optional: specific train to monitor
 	CheckInterval time.Duration // Polling interval
+	history       *history.Store
 }
 
 // NewProvider creates a new Traveloka provider
@@ -43,6 +45,7 @@ func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int,
 		TrainName:     trainName,
 		CheckInterval: interval,
 		Logger:        logger,
+		history:       history.NewStore(100),
 	}
 }
 
@@ -66,6 +69,11 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			p.Logger.Debug("Scheduler checking Traveloka...")
 			trains, err := p.Search(ctx)
 			if err != nil {
+				// Record error in history
+				p.history.Add(common.CheckResult{
+					Timestamp: time.Now(),
+					Error:     err.Error(),
+				})
 				continue
 			}
 
@@ -78,6 +86,13 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 				}
 			}
 
+			// Record result in history
+			p.history.Add(common.CheckResult{
+				Timestamp:       time.Now(),
+				TrainsFound:     len(trains),
+				AvailableTrains: availableTrains,
+			})
+
 			if len(availableTrains) > 0 {
 				msg := fmt.Sprintf("Target Train Available! (%d found)\n", len(availableTrains))
 				for _, t := range availableTrains {
@@ -87,6 +102,11 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			}
 		}
 	}
+}
+
+// GetHistory returns the last N check results
+func (p *Provider) GetHistory(n int) []common.CheckResult {
+	return p.history.GetLast(n)
 }
 
 // Search performs a train search using Traveloka API

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"tiket-kereta-notifier/internal/common"
+	"tiket-kereta-notifier/internal/history"
 )
 
 // APIUrl is the Tiket.com train search API endpoint template
@@ -26,6 +27,7 @@ type Provider struct {
 	TrainName     string        // Optional: specific train to monitor
 	CheckInterval time.Duration // Polling interval
 	ProxyURL      string        // SOCKS5 proxy URL (e.g., "socks5h://127.0.0.1:40000")
+	history       *history.Store
 }
 
 // NewProvider creates a new Tiket.com provider
@@ -40,6 +42,7 @@ func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, inte
 		TrainName:     trainName,
 		CheckInterval: interval,
 		ProxyURL:      proxyURL,
+		history:       history.NewStore(100),
 	}
 }
 
@@ -284,6 +287,11 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			trains, err := p.Search(ctx)
 			if err != nil {
 				p.Logger.Error("Poll failed", "error", err)
+				// Record error in history
+				p.history.Add(common.CheckResult{
+					Timestamp: time.Now(),
+					Error:     err.Error(),
+				})
 				continue
 			}
 
@@ -295,6 +303,13 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 				}
 			}
 
+			// Record result in history
+			p.history.Add(common.CheckResult{
+				Timestamp:       time.Now(),
+				TrainsFound:     len(trains),
+				AvailableTrains: availableTrains,
+			})
+
 			if len(availableTrains) > 0 {
 				msg := fmt.Sprintf("🎫 Tiket.com - Target Train Available! (%d found)\n", len(availableTrains))
 				for _, t := range availableTrains {
@@ -304,4 +319,9 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			}
 		}
 	}
+}
+
+// GetHistory returns the last N check results
+func (p *Provider) GetHistory(n int) []common.CheckResult {
+	return p.history.GetLast(n)
 }
