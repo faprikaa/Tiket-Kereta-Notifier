@@ -29,14 +29,7 @@ type Provider struct {
 	TrainName     string        // Optional: specific train to monitor
 	CheckInterval time.Duration // Polling interval
 	history       *history.Store
-	// Status tracking
-	startTime        time.Time
-	totalChecks      int
-	successfulChecks int
-	failedChecks     int
-	lastCheckTime    time.Time
-	lastCheckFound   bool
-	lastCheckError   string
+	status        *common.StatusTracker
 }
 
 // NewProvider creates a new Traveloka provider
@@ -54,7 +47,7 @@ func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int,
 		CheckInterval: interval,
 		Logger:        logger,
 		history:       history.NewStore(100),
-		startTime:     time.Now(),
+		status:        common.NewStatusTracker(),
 	}
 }
 
@@ -75,16 +68,12 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			p.totalChecks++
-			p.lastCheckTime = time.Now()
+			p.status.RecordCheckStart()
 
 			p.Logger.Debug("Scheduler checking Traveloka...")
 			trains, err := p.Search(ctx)
 			if err != nil {
-				p.failedChecks++
-				p.lastCheckError = err.Error()
-				p.lastCheckFound = false
-				// Record error in history
+				p.status.RecordCheckError(err.Error())
 				p.history.Add(common.CheckResult{
 					Timestamp: time.Now(),
 					Error:     err.Error(),
@@ -92,21 +81,16 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 				continue
 			}
 
-			p.successfulChecks++
-			p.lastCheckError = ""
-
 			// Filter for AVAILABLE trains only for notification
 			var availableTrains []common.Train
 			for _, t := range trains {
-				// Only notify if seats are actually available (not 0)
 				if t.SeatsLeft != "0" && t.SeatsLeft != "" {
 					availableTrains = append(availableTrains, t)
 				}
 			}
 
-			p.lastCheckFound = len(availableTrains) > 0
+			p.status.RecordCheckSuccess(len(availableTrains) > 0)
 
-			// Record result in history
 			p.history.Add(common.CheckResult{
 				Timestamp:       time.Now(),
 				TrainsFound:     len(trains),
@@ -131,14 +115,15 @@ func (p *Provider) GetHistory(n int) []common.CheckResult {
 
 // GetStatus returns the current status of the provider
 func (p *Provider) GetStatus() common.ProviderStatus {
+	startTime, total, success, failed, lastTime, lastFound, lastErr := p.status.GetStats()
 	return common.ProviderStatus{
-		StartTime:        p.startTime,
-		TotalChecks:      p.totalChecks,
-		SuccessfulChecks: p.successfulChecks,
-		FailedChecks:     p.failedChecks,
-		LastCheckTime:    p.lastCheckTime,
-		LastCheckFound:   p.lastCheckFound,
-		LastCheckError:   p.lastCheckError,
+		StartTime:        startTime,
+		TotalChecks:      total,
+		SuccessfulChecks: success,
+		FailedChecks:     failed,
+		LastCheckTime:    lastTime,
+		LastCheckFound:   lastFound,
+		LastCheckError:   lastErr,
 		Origin:           p.Origin,
 		Destination:      p.Destination,
 		Date:             fmt.Sprintf("%d-%02d-%02d", p.Year, p.Month, p.Day),
