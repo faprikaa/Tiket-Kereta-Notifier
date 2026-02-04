@@ -99,7 +99,7 @@ func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 	req.Header.Add("sec-fetch-site", "cross-site")
 	req.Header.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0")
 
-	client := &http.Client{Timeout: 45 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

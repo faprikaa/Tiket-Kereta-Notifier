@@ -1,0 +1,2762 @@
+{
+    "code": "SUCCESS",
+    "message": "Success",
+    "errors": null,
+    "data": {
+        "parameter": {
+            "departDate": "20260216",
+            "returnDate": null,
+            "originCode": "LPN",
+            "originName": "Lempuyangan",
+            "originType": "STATION",
+            "destinationCode": "CKR",
+            "destinationName": "Cikarang",
+            "destinationType": "STATION",
+            "tripType": "ONE_WAY",
+            "connectionTypes": null,
+            "adultCount": 1,
+            "infantCount": 0,
+            "header": {
+                "titleDepart": "Lempuyangan (LPN) ke Cikarang (CKR)",
+                "titleReturn": null,
+                "subtitleDateDepart": "Mon, 16 Feb",
+                "subtitleDateReturn": null,
+                "subtitlePassengerDepart": "1 Penumpang",
+                "subtitlePassengerReturn": null
+            },
+            "trainName": null,
+            "trainClass": null,
+            "productType": "TRAIN",
+            "iconURL": "https://s-light.tiket.photos/t/01E25EBZS3W0FY9GTG6C42E1SE/original/test-discovery/2024/07/24/ea41b8fc-1c8c-4e57-b630-5b9597fc85f7-1721792682641-492ed713cd1c0ff1a61525d9fca9022e.png",
+            "originCity": "Yogyakarta",
+            "destinationCity": "Bekasi"
+        },
+        "banners": [
+            {
+                "type": "PARTIALLY_SOLD_OUT_BANNER",
+                "imageUrl": "",
+                "message": {
+                    "title": "Nggak nemu kereta yang kamu mau?",
+                    "subTitle": "Tenang aja, kamu juga bisa naik bus dan travel ke kota tujuanmu, lho."
+                },
+                "buttons": [
+                    {
+                        "text": "Cari bus dan travel",
+                        "link": "",
+                        "scrollTo": "",
+                        "style": "PRIMARY",
+                        "type": "BUS_SHUTTLE"
+                    }
+                ]
+            }
+        ],
+        "departJourneys": {
+            "bannerTypes": [
+                "PARTIALLY_SOLD_OUT_BANNER"
+            ],
+            "triggeredBanners": [
+                {
+                    "metadata": {
+                        "backgroundColor": ""
+                    },
+                    "funnel": "SRP",
+                    "ruleName": "100p Insurance Train",
+                    "banner": {
+                        "type": "INFO",
+                        "variant": {
+                            "detail": {},
+                            "value": "general"
+                        },
+                        "background": null,
+                        "components": [
+                            {
+                                "hyperlink": {},
+                                "subtext": {
+                                    "subtextColor": "black",
+                                    "text": "Tanggal perjalanan belum pasti? Aman! Klaim 100% refund dengan alasan apa pun."
+                                },
+                                "style": {
+                                    "sticky": false,
+                                    "action": {
+                                        "buttonText": ""
+                                    },
+                                    "image": {
+                                        "imageUrl": "https://s-light.tiket.photos/t/01E25EBZS3W0FY9GTG6C42E1SE/original/test-discovery/2025/03/26/e9bb7168-20bc-4078-a70c-ab73d7c70191-1742964422001-b9c6bb1dd9a0f393c826b6e0ed44daff.png"
+                                    },
+                                    "bannerColor": {
+                                        "value": null
+                                    },
+                                    "closeAction": false
+                                },
+                                "title": {
+                                    "textColor": "black",
+                                    "text": "Train 100% Refund"
+                                }
+                            }
+                        ]
+                    },
+                    "placement": "Card #1",
+                    "priority": 504,
+                    "layer": 2
+                },
+                {
+                    "metadata": {
+                        "backgroundColor": "G200"
+                    },
+                    "funnel": "SRP",
+                    "ruleName": "Kereta Api Feature E-boarding",
+                    "banner": {
+                        "type": "NOTIFICATION",
+                        "variant": {
+                            "detail": {},
+                            "value": "general"
+                        },
+                        "background": null,
+                        "components": [
+                            {
+                                "hyperlink": {
+                                    "language": {
+                                        "en": null,
+                                        "id": null
+                                    },
+                                    "url": "https://www.tiket.com/help-center/kereta-api/pertanyaan-umum/pertanyaan-umum/onlinecheckin-kereta?utm_logic=17F9F3C628256DC09FA2D29C56C7D4A6&utm_section=pageModule%3B66a8b01904b85700016cd86d"
+                                },
+                                "rightAction": {
+                                    "type": "chevron",
+                                    "properties": {},
+                                    "url": "https://www.tiket.com/help-center/kereta-api/pertanyaan-umum/pertanyaan-umum/onlinecheckin-kereta?utm_logic=17F9F3C628256DC09FA2D29C56C7D4A6&utm_section=pageModule%3B66a8b01904b85700016cd86d"
+                                },
+                                "subtext": {
+                                    "subtextColor": "black",
+                                    "text": "Sekarang, kamu bisa check in online. Nggak perlu antre lagi di stasiun"
+                                },
+                                "title": {
+                                    "textColor": "black",
+                                    "text": "Cetak e-boarding pass dari aplikasi"
+                                }
+                            }
+                        ]
+                    },
+                    "placement": "Top Banner",
+                    "priority": 97,
+                    "layer": 1
+                }
+            ],
+            "journeys": [
+                {
+                    "id": "LPN-CKR-2026-02-16-255B-EKO-CC-1587533556",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-255B-EKO-CC-1587533556",
+                            "scheduleId": "1587533556",
+                            "tripId": "5121770",
+                            "tripDate": "2026-02-15",
+                            "trainNumber": "255B",
+                            "trainName": "Jaka Tingkir",
+                            "departureStation": {
+                                "id": 4,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "00:29:00",
+                            "arrivalStation": {
+                                "id": 16,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "07:03:00",
+                            "tripDuration": 23640.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1587533556",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 192,
+                                "code": "CC"
+                            },
+                            "availableSeats": 514,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 400000,
+                                    "originalPriceAmount": 400000,
+                                    "priceAmountBeforeCashback": 400000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 400000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 4,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 16,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "00:29:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "07:03:00",
+                    "totalDuration": 23640.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-255B-EKO-CD-1587533271",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-255B-EKO-CD-1587533271",
+                            "scheduleId": "1587533271",
+                            "tripId": "5121770",
+                            "tripDate": "2026-02-15",
+                            "trainNumber": "255B",
+                            "trainName": "Jaka Tingkir",
+                            "departureStation": {
+                                "id": 4,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "00:29:00",
+                            "arrivalStation": {
+                                "id": 16,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "07:03:00",
+                            "tripDuration": 23640.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1587533271",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 193,
+                                "code": "CD"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 450000,
+                                    "originalPriceAmount": 450000,
+                                    "priceAmountBeforeCashback": 450000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 450000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 4,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 16,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "00:29:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "07:03:00",
+                    "totalDuration": 23640.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-255B-EKO-CA-1587534126",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-255B-EKO-CA-1587534126",
+                            "scheduleId": "1587534126",
+                            "tripId": "5121770",
+                            "tripDate": "2026-02-15",
+                            "trainNumber": "255B",
+                            "trainName": "Jaka Tingkir",
+                            "departureStation": {
+                                "id": 4,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "00:29:00",
+                            "arrivalStation": {
+                                "id": 16,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "07:03:00",
+                            "tripDuration": 23640.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1587534126",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 190,
+                                "code": "CA"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 350000,
+                                    "originalPriceAmount": 350000,
+                                    "priceAmountBeforeCashback": 350000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 350000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 4,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 16,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "00:29:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "07:03:00",
+                    "totalDuration": 23640.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-255B-EKO-CB-1587533841",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-255B-EKO-CB-1587533841",
+                            "scheduleId": "1587533841",
+                            "tripId": "5121770",
+                            "tripDate": "2026-02-15",
+                            "trainNumber": "255B",
+                            "trainName": "Jaka Tingkir",
+                            "departureStation": {
+                                "id": 4,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "00:29:00",
+                            "arrivalStation": {
+                                "id": 16,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "07:03:00",
+                            "tripDuration": 23640.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1587533841",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 191,
+                                "code": "CB"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 380000,
+                                    "originalPriceAmount": 380000,
+                                    "priceAmountBeforeCashback": 380000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 380000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 4,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 16,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "00:29:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "07:03:00",
+                    "totalDuration": 23640.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-103B-EKS-AB-1583867020",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-103B-EKS-AB-1583867020",
+                            "scheduleId": "1583867020",
+                            "tripId": "5119589",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "103B",
+                            "trainName": "Bogowonto",
+                            "departureStation": {
+                                "id": 1,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "08:15:00",
+                            "arrivalStation": {
+                                "id": 13,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "15:16:00",
+                            "tripDuration": 25260.000000000,
+                            "wagonClass": {
+                                "id": 1,
+                                "code": "EKS:1583867020",
+                                "detail": "Executive"
+                            },
+                            "subClass": {
+                                "id": 187,
+                                "code": "AB"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 480000,
+                                    "originalPriceAmount": 480000,
+                                    "priceAmountBeforeCashback": 480000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 480000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph2_popularity_headerCardLabel ",
+                        "train_nudge_ph3_executive_new_generation_incardText ",
+                        "train_nudge_ph2_fastest_incardLabel "
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 1,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 13,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "08:15:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "15:16:00",
+                    "totalDuration": 25260.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-103B-EKO-CC-1583867860",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-103B-EKO-CC-1583867860",
+                            "scheduleId": "1583867860",
+                            "tripId": "5119589",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "103B",
+                            "trainName": "Bogowonto",
+                            "departureStation": {
+                                "id": 1,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "08:15:00",
+                            "arrivalStation": {
+                                "id": 13,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "15:16:00",
+                            "tripDuration": 25260.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1583867860",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 192,
+                                "code": "CC"
+                            },
+                            "availableSeats": 390,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 380000,
+                                    "originalPriceAmount": 380000,
+                                    "priceAmountBeforeCashback": 380000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 380000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 1,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 13,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "08:15:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "15:16:00",
+                    "totalDuration": 25260.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-103B-EKO-CA-1583866497",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-103B-EKO-CA-1583866497",
+                            "scheduleId": "1583866497",
+                            "tripId": "5119589",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "103B",
+                            "trainName": "Bogowonto",
+                            "departureStation": {
+                                "id": 1,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "08:15:00",
+                            "arrivalStation": {
+                                "id": 13,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "15:16:00",
+                            "tripDuration": 25260.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1583866497",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 190,
+                                "code": "CA"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 330000,
+                                    "originalPriceAmount": 330000,
+                                    "priceAmountBeforeCashback": 330000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 330000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 1,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 13,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "08:15:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "15:16:00",
+                    "totalDuration": 25260.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-103B-EKS-AC-1583866915",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-103B-EKS-AC-1583866915",
+                            "scheduleId": "1583866915",
+                            "tripId": "5119589",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "103B",
+                            "trainName": "Bogowonto",
+                            "departureStation": {
+                                "id": 1,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "08:15:00",
+                            "arrivalStation": {
+                                "id": 13,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "15:16:00",
+                            "tripDuration": 25260.000000000,
+                            "wagonClass": {
+                                "id": 1,
+                                "code": "EKS:1583866915",
+                                "detail": "Executive"
+                            },
+                            "subClass": {
+                                "id": 188,
+                                "code": "AC"
+                            },
+                            "availableSeats": 53,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 530000,
+                                    "originalPriceAmount": 530000,
+                                    "priceAmountBeforeCashback": 530000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 530000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph2_popularity_headerCardLabel ",
+                        "train_nudge_ph3_executive_new_generation_incardText ",
+                        "train_nudge_ph2_fastest_incardLabel "
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 1,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 13,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "08:15:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "15:16:00",
+                    "totalDuration": 25260.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-103B-EKS-AA-1583867125",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-103B-EKS-AA-1583867125",
+                            "scheduleId": "1583867125",
+                            "tripId": "5119589",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "103B",
+                            "trainName": "Bogowonto",
+                            "departureStation": {
+                                "id": 1,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "08:15:00",
+                            "arrivalStation": {
+                                "id": 13,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "15:16:00",
+                            "tripDuration": 25260.000000000,
+                            "wagonClass": {
+                                "id": 1,
+                                "code": "EKS:1583867125",
+                                "detail": "Executive"
+                            },
+                            "subClass": {
+                                "id": 167,
+                                "code": "AA"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 470000,
+                                    "originalPriceAmount": 470000,
+                                    "priceAmountBeforeCashback": 470000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 470000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph2_popularity_headerCardLabel ",
+                        "train_nudge_ph3_executive_new_generation_incardText ",
+                        "train_nudge_ph2_fastest_incardLabel "
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 1,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 13,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "08:15:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "15:16:00",
+                    "totalDuration": 25260.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-103B-EKS-AD-1583866810",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-103B-EKS-AD-1583866810",
+                            "scheduleId": "1583866810",
+                            "tripId": "5119589",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "103B",
+                            "trainName": "Bogowonto",
+                            "departureStation": {
+                                "id": 1,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "08:15:00",
+                            "arrivalStation": {
+                                "id": 13,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "15:16:00",
+                            "tripDuration": 25260.000000000,
+                            "wagonClass": {
+                                "id": 1,
+                                "code": "EKS:1583866810",
+                                "detail": "Executive"
+                            },
+                            "subClass": {
+                                "id": 189,
+                                "code": "AD"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 580000,
+                                    "originalPriceAmount": 580000,
+                                    "priceAmountBeforeCashback": 580000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 580000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph2_popularity_headerCardLabel ",
+                        "train_nudge_ph3_executive_new_generation_incardText ",
+                        "train_nudge_ph2_fastest_incardLabel "
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 1,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 13,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "08:15:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "15:16:00",
+                    "totalDuration": 25260.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-103B-EKO-CB-1583866392",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-103B-EKO-CB-1583866392",
+                            "scheduleId": "1583866392",
+                            "tripId": "5119589",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "103B",
+                            "trainName": "Bogowonto",
+                            "departureStation": {
+                                "id": 1,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "08:15:00",
+                            "arrivalStation": {
+                                "id": 13,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "15:16:00",
+                            "tripDuration": 25260.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1583866392",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 191,
+                                "code": "CB"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 360000,
+                                    "originalPriceAmount": 360000,
+                                    "priceAmountBeforeCashback": 360000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 360000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 1,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 13,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "08:15:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "15:16:00",
+                    "totalDuration": 25260.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-103B-EKO-CD-1583867755",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-103B-EKO-CD-1583867755",
+                            "scheduleId": "1583867755",
+                            "tripId": "5119589",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "103B",
+                            "trainName": "Bogowonto",
+                            "departureStation": {
+                                "id": 1,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "08:15:00",
+                            "arrivalStation": {
+                                "id": 13,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "15:16:00",
+                            "tripDuration": 25260.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1583867755",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 193,
+                                "code": "CD"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 400000,
+                                    "originalPriceAmount": 400000,
+                                    "priceAmountBeforeCashback": 400000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 400000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 1,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 13,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "08:15:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "15:16:00",
+                    "totalDuration": 25260.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-89-EKO-CC-1401721696",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-89-EKO-CC-1401721696",
+                            "scheduleId": "1401721696",
+                            "tripId": "5013027",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "89",
+                            "trainName": "Gaya Baru Malam Selatan",
+                            "departureStation": {
+                                "id": 12,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "11:12:00",
+                            "arrivalStation": {
+                                "id": 28,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "18:20:00",
+                            "tripDuration": 25680.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1401721696",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 192,
+                                "code": "CC"
+                            },
+                            "availableSeats": 201,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 355000,
+                                    "originalPriceAmount": 355000,
+                                    "priceAmountBeforeCashback": 355000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 355000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 12,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 28,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "11:12:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "18:20:00",
+                    "totalDuration": 25680.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-89-EKO-CD-1401725957",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-89-EKO-CD-1401725957",
+                            "scheduleId": "1401725957",
+                            "tripId": "5013027",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "89",
+                            "trainName": "Gaya Baru Malam Selatan",
+                            "departureStation": {
+                                "id": 12,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "11:12:00",
+                            "arrivalStation": {
+                                "id": 28,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "18:20:00",
+                            "tripDuration": 25680.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1401725957",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 193,
+                                "code": "CD"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 370000,
+                                    "originalPriceAmount": 370000,
+                                    "priceAmountBeforeCashback": 370000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 370000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 12,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 28,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "11:12:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "18:20:00",
+                    "totalDuration": 25680.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-89-EKO-CA-1401716869",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-89-EKO-CA-1401716869",
+                            "scheduleId": "1401716869",
+                            "tripId": "5013027",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "89",
+                            "trainName": "Gaya Baru Malam Selatan",
+                            "departureStation": {
+                                "id": 12,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "11:12:00",
+                            "arrivalStation": {
+                                "id": 28,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "18:20:00",
+                            "tripDuration": 25680.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1401716869",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 190,
+                                "code": "CA"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 330000,
+                                    "originalPriceAmount": 330000,
+                                    "priceAmountBeforeCashback": 330000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 330000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 12,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 28,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "11:12:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "18:20:00",
+                    "totalDuration": 25680.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-89-EKS-AC-1401706217",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-89-EKS-AC-1401706217",
+                            "scheduleId": "1401706217",
+                            "tripId": "5013027",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "89",
+                            "trainName": "Gaya Baru Malam Selatan",
+                            "departureStation": {
+                                "id": 12,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "11:12:00",
+                            "arrivalStation": {
+                                "id": 28,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "18:20:00",
+                            "tripDuration": 25680.000000000,
+                            "wagonClass": {
+                                "id": 1,
+                                "code": "EKS:1401706217",
+                                "detail": "Executive"
+                            },
+                            "subClass": {
+                                "id": 188,
+                                "code": "AC"
+                            },
+                            "availableSeats": 78,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 475000,
+                                    "originalPriceAmount": 475000,
+                                    "priceAmountBeforeCashback": 475000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 475000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph2_bestSelling_incardText "
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 12,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 28,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "11:12:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "18:20:00",
+                    "totalDuration": 25680.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-89-EKS-AB-1401687405",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-89-EKS-AB-1401687405",
+                            "scheduleId": "1401687405",
+                            "tripId": "5013027",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "89",
+                            "trainName": "Gaya Baru Malam Selatan",
+                            "departureStation": {
+                                "id": 12,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "11:12:00",
+                            "arrivalStation": {
+                                "id": 28,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "18:20:00",
+                            "tripDuration": 25680.000000000,
+                            "wagonClass": {
+                                "id": 1,
+                                "code": "EKS:1401687405",
+                                "detail": "Executive"
+                            },
+                            "subClass": {
+                                "id": 187,
+                                "code": "AB"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 440000,
+                                    "originalPriceAmount": 440000,
+                                    "priceAmountBeforeCashback": 440000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 440000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph2_bestSelling_incardText "
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 12,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 28,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "11:12:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "18:20:00",
+                    "totalDuration": 25680.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-89-EKS-AD-1401710031",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-89-EKS-AD-1401710031",
+                            "scheduleId": "1401710031",
+                            "tripId": "5013027",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "89",
+                            "trainName": "Gaya Baru Malam Selatan",
+                            "departureStation": {
+                                "id": 12,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "11:12:00",
+                            "arrivalStation": {
+                                "id": 28,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "18:20:00",
+                            "tripDuration": 25680.000000000,
+                            "wagonClass": {
+                                "id": 1,
+                                "code": "EKS:1401710031",
+                                "detail": "Executive"
+                            },
+                            "subClass": {
+                                "id": 189,
+                                "code": "AD"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 490000,
+                                    "originalPriceAmount": 490000,
+                                    "priceAmountBeforeCashback": 490000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 490000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph2_bestSelling_incardText "
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 12,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 28,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "11:12:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "18:20:00",
+                    "totalDuration": 25680.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-89-EKO-CB-1401718302",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-89-EKO-CB-1401718302",
+                            "scheduleId": "1401718302",
+                            "tripId": "5013027",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "89",
+                            "trainName": "Gaya Baru Malam Selatan",
+                            "departureStation": {
+                                "id": 12,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "11:12:00",
+                            "arrivalStation": {
+                                "id": 28,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "18:20:00",
+                            "tripDuration": 25680.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1401718302",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 191,
+                                "code": "CB"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 340000,
+                                    "originalPriceAmount": 340000,
+                                    "priceAmountBeforeCashback": 340000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 340000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_new_generation_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 12,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 28,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "11:12:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "18:20:00",
+                    "totalDuration": 25680.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-89-EKS-AA-1401686146",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-89-EKS-AA-1401686146",
+                            "scheduleId": "1401686146",
+                            "tripId": "5013027",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "89",
+                            "trainName": "Gaya Baru Malam Selatan",
+                            "departureStation": {
+                                "id": 12,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "11:12:00",
+                            "arrivalStation": {
+                                "id": 28,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-16",
+                            "arrivalTime": "18:20:00",
+                            "tripDuration": 25680.000000000,
+                            "wagonClass": {
+                                "id": 1,
+                                "code": "EKS:1401686146",
+                                "detail": "Executive"
+                            },
+                            "subClass": {
+                                "id": 167,
+                                "code": "AA"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 425000,
+                                    "originalPriceAmount": 425000,
+                                    "priceAmountBeforeCashback": 425000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 425000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph2_bestSelling_incardText "
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 12,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 28,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "11:12:00",
+                    "arriveDate": "2026-02-16",
+                    "arriveTime": "18:20:00",
+                    "totalDuration": 25680.000000000,
+                    "transitTimings": [],
+                    "nextDays": 0
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-251B-EKO-CA-1587713214",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-251B-EKO-CA-1587713214",
+                            "scheduleId": "1587713214",
+                            "tripId": "5121799",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "251B",
+                            "trainName": "Jayakarta",
+                            "departureStation": {
+                                "id": 14,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "18:31:00",
+                            "arrivalStation": {
+                                "id": 26,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-17",
+                            "arrivalTime": "01:53:00",
+                            "tripDuration": 26520.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1587713214",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 190,
+                                "code": "CA"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 290000,
+                                    "originalPriceAmount": 290000,
+                                    "priceAmountBeforeCashback": 290000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 290000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_premium_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 14,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 26,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "18:31:00",
+                    "arriveDate": "2026-02-17",
+                    "arriveTime": "01:53:00",
+                    "totalDuration": 26520.000000000,
+                    "transitTimings": [],
+                    "nextDays": 1
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-251B-EKO-CC-1587717926",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-251B-EKO-CC-1587717926",
+                            "scheduleId": "1587717926",
+                            "tripId": "5121799",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "251B",
+                            "trainName": "Jayakarta",
+                            "departureStation": {
+                                "id": 14,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "18:31:00",
+                            "arrivalStation": {
+                                "id": 26,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-17",
+                            "arrivalTime": "01:53:00",
+                            "tripDuration": 26520.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1587717926",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 192,
+                                "code": "CC"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 315000,
+                                    "originalPriceAmount": 315000,
+                                    "priceAmountBeforeCashback": 315000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 315000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_premium_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 14,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 26,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "18:31:00",
+                    "arriveDate": "2026-02-17",
+                    "arriveTime": "01:53:00",
+                    "totalDuration": 26520.000000000,
+                    "transitTimings": [],
+                    "nextDays": 1
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-251B-EKO-CB-1587716799",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-251B-EKO-CB-1587716799",
+                            "scheduleId": "1587716799",
+                            "tripId": "5121799",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "251B",
+                            "trainName": "Jayakarta",
+                            "departureStation": {
+                                "id": 14,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "18:31:00",
+                            "arrivalStation": {
+                                "id": 26,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-17",
+                            "arrivalTime": "01:53:00",
+                            "tripDuration": 26520.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1587716799",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 191,
+                                "code": "CB"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 305000,
+                                    "originalPriceAmount": 305000,
+                                    "priceAmountBeforeCashback": 305000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 305000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_premium_incardText"
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 14,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 26,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "18:31:00",
+                    "arriveDate": "2026-02-17",
+                    "arriveTime": "01:53:00",
+                    "totalDuration": 26520.000000000,
+                    "transitTimings": [],
+                    "nextDays": 1
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-251B-EKO-CD-1587717260",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-251B-EKO-CD-1587717260",
+                            "scheduleId": "1587717260",
+                            "tripId": "5121799",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "251B",
+                            "trainName": "Jayakarta",
+                            "departureStation": {
+                                "id": 14,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "18:31:00",
+                            "arrivalStation": {
+                                "id": 26,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-17",
+                            "arrivalTime": "01:53:00",
+                            "tripDuration": 26520.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1587717260",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 193,
+                                "code": "CD"
+                            },
+                            "availableSeats": 836,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 345000,
+                                    "originalPriceAmount": 345000,
+                                    "priceAmountBeforeCashback": 345000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 345000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [
+                        "train_nudge_ph3_economy_premium_incardText",
+                        "train_nudge_ph2_cheapest_incardLabel "
+                    ],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 14,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 26,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "18:31:00",
+                    "arriveDate": "2026-02-17",
+                    "arriveTime": "01:53:00",
+                    "totalDuration": 26520.000000000,
+                    "transitTimings": [],
+                    "nextDays": 1
+                },
+                {
+                    "id": "LPN-CKR-2026-02-16-281-EKO-C-1320868242",
+                    "segmentSchedules": [
+                        {
+                            "id": "LPN-CKR-2026-02-16-281-EKO-C-1320868242",
+                            "scheduleId": "1320868242",
+                            "tripId": "4923237",
+                            "tripDate": "2026-02-16",
+                            "trainNumber": "281",
+                            "trainName": "Bengawan",
+                            "departureStation": {
+                                "id": 3,
+                                "code": "LPN",
+                                "name": "Lempuyangan",
+                                "locator": null,
+                                "city": null
+                            },
+                            "departureDate": "2026-02-16",
+                            "departureTime": "23:34:00",
+                            "arrivalStation": {
+                                "id": 14,
+                                "code": "CKR",
+                                "name": "Cikarang",
+                                "locator": null,
+                                "city": null
+                            },
+                            "arrivalDate": "2026-02-17",
+                            "arrivalTime": "06:50:00",
+                            "tripDuration": 26160.000000000,
+                            "wagonClass": {
+                                "id": 4,
+                                "code": "EKO:1320868242",
+                                "detail": "Economy"
+                            },
+                            "subClass": {
+                                "id": 81,
+                                "code": "C"
+                            },
+                            "availableSeats": 0,
+                            "scheduleFares": [
+                                {
+                                    "paxType": "ADULT",
+                                    "priceAmount": 74000,
+                                    "originalPriceAmount": 74000,
+                                    "priceAmountBeforeCashback": 74000,
+                                    "subsidyAmount": 0,
+                                    "markupAmount": 0,
+                                    "cashbackSubsidyAmount": 0,
+                                    "directSubsidyAmount": 0,
+                                    "kuberEvaluateHistories": null,
+                                    "isUsingDeferredCost": true
+                                }
+                            ],
+                            "facilities": [],
+                            "loyaltyReward": {
+                                "earnPoints": 0,
+                                "percentage": 0.0,
+                                "baseAmount": 74000,
+                                "components": [
+                                    "BASE_PRICE",
+                                    "TIER_DISCOUNT",
+                                    "UNIQUE_CODE",
+                                    "PROMO_CODE",
+                                    "GIFT_VOUCHER",
+                                    "TIX_POINT"
+                                ],
+                                "available": true,
+                                "version": 7
+                            },
+                            "vendorData": {
+                                "vendorId": "kai"
+                            },
+                            "stopCount": -1
+                        }
+                    ],
+                    "nudges": [],
+                    "segmentCount": 1,
+                    "originStation": {
+                        "id": 3,
+                        "code": "LPN",
+                        "name": "Lempuyangan",
+                        "locator": null,
+                        "city": null
+                    },
+                    "destinationStation": {
+                        "id": 14,
+                        "code": "CKR",
+                        "name": "Cikarang",
+                        "locator": null,
+                        "city": null
+                    },
+                    "departDate": "2026-02-16",
+                    "departTime": "23:34:00",
+                    "arriveDate": "2026-02-17",
+                    "arriveTime": "06:50:00",
+                    "totalDuration": 26160.000000000,
+                    "transitTimings": [],
+                    "nextDays": 1
+                }
+            ],
+            "alternatives": [],
+            "count": 25
+        },
+        "crossSellBus": {
+            "originLocationId": "63d0b5bb2cbd5656536b9ec4",
+            "destinationLocationId": "63d0b5ad2cbd5656536b928d"
+        },
+        "nudgesSource": [
+            {
+                "backgroundColor": "",
+                "text": "New Generation Train",
+                "iconURL": "",
+                "type": "incard-text",
+                "textColor": "#10A4AF",
+                "rule": "train_nudge_ph3_economy_new_generation_incardText"
+            },
+            {
+                "backgroundColor": "#FF7200",
+                "text": "High demand, sold out quickly!",
+                "iconURL": "https://s-light.tiket.photos/t/01E25EBZS3W0FY9GTG6C42E1SE/original/test-discovery/2024/01/16/12267933-c145-4cd7-bf06-7586f2a264b6-1705402040063-ec32abe955cb68fbb9ec675abf903850.png",
+                "type": "header-card-label",
+                "textColor": "#FFFFFF",
+                "rule": "train_nudge_ph2_popularity_headerCardLabel "
+            },
+            {
+                "backgroundColor": "",
+                "text": "New Generation Train",
+                "iconURL": "",
+                "type": "incard-text",
+                "textColor": "#10A4AF",
+                "rule": "train_nudge_ph3_executive_new_generation_incardText "
+            },
+            {
+                "backgroundColor": "#10A4AF",
+                "text": "Fastest train",
+                "iconURL": "",
+                "type": "incard-label",
+                "textColor": "#FFFFFF",
+                "rule": "train_nudge_ph2_fastest_incardLabel "
+            },
+            {
+                "backgroundColor": "",
+                "text": "Premium Economy",
+                "iconURL": "",
+                "type": "incard-text",
+                "textColor": "#10A4AF",
+                "rule": "train_nudge_ph3_economy_premium_incardText"
+            },
+            {
+                "backgroundColor": "",
+                "text": "#1 bestseller of this route",
+                "iconURL": "",
+                "type": "incard-text",
+                "textColor": "#0BAE54",
+                "rule": "train_nudge_ph2_bestSelling_incardText "
+            },
+            {
+                "backgroundColor": "#F15C59",
+                "text": "This date's lowest price",
+                "iconURL": "",
+                "type": "incard-label",
+                "textColor": "#FFFFFF",
+                "rule": "train_nudge_ph2_cheapest_incardLabel "
+            }
+        ],
+        "train": {
+            "maxInfant": 4,
+            "maxAdult": 4,
+            "maxSelectionDay": 45,
+            "maxInfantAge": 3
+        },
+        "whoosh": {
+            "maxInfant": 5,
+            "maxAdult": 5,
+            "maxSelectionDay": 30,
+            "maxInfantAge": 3
+        },
+        "minimumGapRoundTrip": {
+            "timeInMinutes": 60,
+            "text": "at least 1 hour"
+        }
+    },
+    "serverTime": 1770108562.323166000
+}

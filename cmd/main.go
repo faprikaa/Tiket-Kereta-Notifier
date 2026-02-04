@@ -14,6 +14,7 @@ import (
 	"tiket-kereta-notifier/internal/common"
 	"tiket-kereta-notifier/internal/config"
 	"tiket-kereta-notifier/internal/telegram"
+	"tiket-kereta-notifier/internal/tiketcom"
 	"tiket-kereta-notifier/internal/tiketkai"
 	"tiket-kereta-notifier/internal/traveloka"
 	"tiket-kereta-notifier/internal/tunnel"
@@ -26,17 +27,13 @@ func main() {
 	// Setup logging
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	if cfg.TelegramToken == "" || len(cfg.TelegramChatIDs) == 0 {
-		logger.Error("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are required")
+	// Validate config
+	if err := cfg.Validate(); err != nil {
+		logger.Error("Config validation failed", "error", err)
 		os.Exit(1)
 	}
 
 	telegram.Init(cfg.TelegramToken, cfg.TelegramChatIDs, logger)
-
-	// Check webhook mode
-	useWebhook := cfg.UseWebhook
-	webhookPort := cfg.WebhookPort
-	chatIDs := cfg.TelegramChatIDs
 
 	// Create telegram bot with commands
 	tgBot := telegram.NewBot(logger)
@@ -51,37 +48,9 @@ func main() {
 		providerName = os.Args[1]
 	}
 
-	var appProvider common.Provider
-
-	switch strings.ToLower(providerName) {
-	case "tiketkai":
-		if err := tiketkai.Init(ctx); err != nil {
-			logger.Error("Failed to init TiketKai", "error", err)
-			os.Exit(1)
-		}
-		appProvider = tiketkai.NewProvider(logger, cfg.Origin, cfg.Destination, cfg.Date, cfg.TrainName, cfg.Interval)
-
-	case "traveloka":
-		if cfg.Origin == "" || cfg.Destination == "" {
-			logger.Error("TRAIN_ORIGIN and TRAIN_DESTINATION are required")
-			os.Exit(1)
-		}
-
-		// Parse date
-		day, month, year := 16, 2, 2026 // Fallback
-		if cfg.Date != "" {
-			if t, err := time.Parse("2006-01-02", cfg.Date); err == nil {
-				day, month, year = t.Day(), int(t.Month()), t.Year()
-			}
-		}
-
-		appProvider = traveloka.NewProvider(logger, cfg.Origin, cfg.Destination, day, month, year, cfg.TrainName, cfg.Interval)
-
-	case "help":
-		printHelp()
-		return
-	default:
-		logger.Error("PROVIDER must be 'tiketkai' or 'traveloka'")
+	appProvider, err := initProvider(ctx, logger, cfg, providerName)
+	if err != nil {
+		logger.Error("Failed to init provider", "provider", providerName, "error", err)
 		os.Exit(1)
 	}
 
@@ -90,33 +59,96 @@ func main() {
 
 	// Start Provider Scheduler in Background
 	go appProvider.StartScheduler(ctx, func(msg string) {
-		// Iterate chatIDs
-		for _, chatID := range chatIDs {
+		for _, chatID := range cfg.TelegramChatIDs {
 			telegram.SendMessage(msg, chatID)
 		}
 	})
 
+	runBot(ctx, logger, cfg, tgBot, appProvider)
+}
+
+// initProvider creates and initializes the appropriate provider
+func initProvider(ctx context.Context, logger *slog.Logger, cfg *config.Config, providerName string) (common.Provider, error) {
+	switch strings.ToLower(providerName) {
+	case "tiketkai":
+		if err := tiketkai.Init(ctx); err != nil {
+			return nil, fmt.Errorf("TiketKai init failed: %w", err)
+		}
+		return tiketkai.NewProvider(logger, cfg.Origin, cfg.Destination, cfg.Date, cfg.TrainName, cfg.Interval), nil
+
+	case "traveloka":
+		if err := cfg.ValidateTrainConfig(); err != nil {
+			return nil, err
+		}
+		day, month, year := cfg.DateParts()
+		return traveloka.NewProvider(logger, cfg.Origin, cfg.Destination, day, month, year, cfg.TrainName, cfg.Interval), nil
+
+	case "tiketcom":
+		if err := cfg.ValidateTrainConfig(); err != nil {
+			return nil, err
+		}
+		provider := tiketcom.NewProvider(logger, cfg.Origin, cfg.Destination, cfg.DateYYYYMMDD(), cfg.TrainName, cfg.Interval)
+
+		// Test connection and check for Turnstile/Captcha
+		logger.Info("Testing Tiket.com connection...")
+		if err := testTiketcomConnection(ctx, provider, logger); err != nil {
+			return nil, err
+		}
+		return provider, nil
+
+	case "help":
+		printHelp()
+		os.Exit(0)
+		return nil, nil
+
+	default:
+		return nil, fmt.Errorf("PROVIDER must be 'tiketkai', 'traveloka', or 'tiketcom'")
+	}
+}
+
+// testTiketcomConnection tests Tiket.com API and checks for captcha blocks
+func testTiketcomConnection(ctx context.Context, provider *tiketcom.Provider, logger *slog.Logger) error {
+	trains, err := provider.Search(ctx)
+	if err != nil {
+		errStr := strings.ToLower(err.Error())
+		if containsAny(errStr, "turnstile", "captcha", "challenge", "ray-id", "cloudflare") {
+			return fmt.Errorf("⚠️ Tiket.com is blocked by Turnstile/Captcha! Try using a proxy via TIKETCOM_PROXY_URL")
+		}
+		return fmt.Errorf("connection test failed: %w", err)
+	}
+	logger.Info("✅ Tiket.com connection OK", "trains_found", len(trains))
+	return nil
+}
+
+// containsAny checks if s contains any of the substrings
+func containsAny(s string, substrs ...string) bool {
+	for _, sub := range substrs {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// runBot starts the bot in webhook or polling mode
+func runBot(ctx context.Context, logger *slog.Logger, cfg *config.Config, tgBot *telegram.Bot, appProvider common.Provider) {
 	var t *tunnel.Tunnel
-	if useWebhook {
-		// Start tunnel in background
+
+	if cfg.UseWebhook {
 		t = tunnel.New(logger)
 		go func() {
-			publicURL, err := t.Start(ctx, fmt.Sprintf("http://localhost:%d", webhookPort))
+			publicURL, err := t.Start(ctx, fmt.Sprintf("http://localhost:%d", cfg.WebhookPort))
 			if err != nil {
 				logger.Error("Failed to start tunnel", "error", err)
 				return
 			}
 			tgBot.SetWebhook(publicURL + "/webhook")
-			// Send startup notification
 			telegram.SendMessage(fmt.Sprintf("🚀 Bot started!\nProvider: %s\nWebhook: %s", appProvider.Name(), publicURL))
 		}()
 
-		// Start server (non-blocking, runs in goroutine)
-		if err := tgBot.StartWebhook(webhookPort, chatIDs); err != nil {
+		if err := tgBot.StartWebhook(cfg.WebhookPort, cfg.TelegramChatIDs); err != nil {
 			logger.Error("Webhook server failed", "error", err)
 		}
-
-		// Wait for shutdown signal
 		<-ctx.Done()
 	} else {
 		logger.Info("Bot running in long-polling/manual mode. Press Ctrl+C to exit.")
@@ -125,8 +157,7 @@ func main() {
 
 	logger.Info("Shutting down...")
 
-	// Cleanup
-	if useWebhook && t != nil {
+	if cfg.UseWebhook && t != nil {
 		tgBot.DeleteWebhook()
 		t.Stop()
 	}
@@ -144,6 +175,7 @@ Usage:
 Providers:
   tiketkai    Monitor TiketKai API (Default)
   traveloka   Monitor Traveloka API
+  tiketcom    Monitor Tiket.com API (uses curl_chrome110)
 
 Environment Variables (via .env):
   PROVIDER            Default provider to run
@@ -155,5 +187,6 @@ Environment Variables (via .env):
   TELEGRAM_BOT_TOKEN  Telegram Bot Token
   TELEGRAM_CHAT_ID    Telegram Chat ID(s), comma separated
   USE_WEBHOOK         Enable webhook & cloudflared (true/false)
-  WEBHOOK_PORT        Port for webhook (default 8080)`)
+  WEBHOOK_PORT        Port for webhook (default 8080)
+  TIKETCOM_PROXY_URL  (Optional) SOCKS5 proxy for Tiket.com`)
 }
