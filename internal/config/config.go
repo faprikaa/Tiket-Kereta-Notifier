@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -76,4 +77,48 @@ func GetEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// Validate checks required configuration fields
+func (c *Config) Validate() error {
+	if c.TelegramToken == "" {
+		return fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
+	}
+	if len(c.TelegramChatIDs) == 0 {
+		return fmt.Errorf("TELEGRAM_CHAT_ID is required")
+	}
+	return nil
+}
+
+// ValidateTrainConfig checks train-specific configuration
+func (c *Config) ValidateTrainConfig() error {
+	if c.Origin == "" {
+		return fmt.Errorf("TRAIN_ORIGIN is required")
+	}
+	if c.Destination == "" {
+		return fmt.Errorf("TRAIN_DESTINATION is required")
+	}
+	return nil
+}
+
+// DateYYYYMMDD returns date in YYYYMMDD format for Tiket.com
+// Exits if TRAIN_DATE is not set
+func (c *Config) DateYYYYMMDD() string {
+	if c.Date == "" {
+		log.Fatal("TRAIN_DATE is required")
+	}
+	return strings.ReplaceAll(c.Date, "-", "")
+}
+
+// DateParts returns day, month, year for Traveloka
+// Exits if TRAIN_DATE is not set or invalid
+func (c *Config) DateParts() (day, month, year int) {
+	if c.Date == "" {
+		log.Fatal("TRAIN_DATE is required")
+	}
+	t, err := time.Parse("2006-01-02", c.Date)
+	if err != nil {
+		log.Fatalf("Invalid TRAIN_DATE format (expected YYYY-MM-DD): %v", err)
+	}
+	return t.Day(), int(t.Month()), t.Year()
 }
