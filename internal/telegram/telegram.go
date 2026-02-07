@@ -17,27 +17,27 @@ import (
 
 var (
 	Token        string
-	ChatIDs      []string
+	ChatID       string
 	Limiter      *rate.Limiter
 	Logger       *slog.Logger
 	LastUpdateID int64
 )
 
-// Init initializes the telegram bot with token and chat IDs
-func Init(token string, chatIDs []string, logger *slog.Logger) {
+// Init initializes the telegram bot with token and chat ID
+func Init(token string, chatID string, logger *slog.Logger) {
 	Token = token
-	ChatIDs = chatIDs
+	ChatID = chatID
 	Logger = logger
 	Limiter = rate.NewLimiter(rate.Limit(2), 4) // 2 requests per second
 }
 
-// SendMessage sends a message to all configured chat IDs
-func SendMessage(text string, chatIDs ...string) bool {
-	targetChatIDs := ChatIDs
-	if len(chatIDs) > 0 && chatIDs[0] != "" {
-		targetChatIDs = chatIDs
+// SendMessage sends a message to the configured chat ID or specified chat ID
+func SendMessage(text string, chatID ...string) bool {
+	targetChatID := ChatID
+	if len(chatID) > 0 && chatID[0] != "" {
+		targetChatID = chatID[0]
 	}
-	if len(targetChatIDs) == 0 {
+	if targetChatID == "" {
 		return false
 	}
 
@@ -49,13 +49,7 @@ func SendMessage(text string, chatIDs ...string) bool {
 		fullMessage = fullMessage[:maxLength-25] + "\n\n[Message truncated]"
 	}
 
-	success := false
-	for _, chatID := range targetChatIDs {
-		if sendToSingleChat(fullMessage, chatID) {
-			success = true
-		}
-	}
-	return success
+	return sendToSingleChat(fullMessage, targetChatID)
 }
 
 func sendToSingleChat(message, chatID string) bool {
@@ -86,12 +80,7 @@ func sendToSingleChat(message, chatID string) bool {
 			if newID, exists := params["migrate_to_chat_id"]; exists {
 				newChatID := fmt.Sprintf("%.0f", newID.(float64))
 				Logger.Info("Chat migrated", "old_id", chatID, "new_id", newChatID)
-				for i, id := range ChatIDs {
-					if id == chatID {
-						ChatIDs[i] = newChatID
-						break
-					}
-				}
+				ChatID = newChatID
 				return sendToSingleChat(message, newChatID)
 			}
 		}

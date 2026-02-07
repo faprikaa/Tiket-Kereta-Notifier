@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -32,12 +33,13 @@ type Provider struct {
 	Date          string // YYYY-MM-DD
 	TrainName     string // Target train name filter
 	CheckInterval time.Duration
+	ProxyURL      string // Optional SOCKS5 proxy
 	history       *history.Store
 	status        *common.StatusTracker
 }
 
 // NewProvider creates a new TiketKai provider
-func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration) *Provider {
+func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, proxyURL string) *Provider {
 	return &Provider{
 		Logger:        logger,
 		Origin:        origin,
@@ -45,6 +47,7 @@ func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, inte
 		Date:          date,
 		TrainName:     trainName,
 		CheckInterval: interval,
+		ProxyURL:      proxyURL,
 		history:       history.NewStore(100),
 		status:        common.NewStatusTracker(),
 	}
@@ -104,7 +107,7 @@ func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 	req.Header.Add("sec-fetch-site", "cross-site")
 	req.Header.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0")
 
-	client := &http.Client{Timeout: 60 * time.Second}
+	client := p.createHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -315,6 +318,24 @@ func (p *Provider) GetStatus() common.ProviderStatus {
 		Date:             p.Date,
 		TrainName:        p.TrainName,
 		Interval:         p.CheckInterval,
+	}
+}
+
+// createHTTPClient creates an HTTP client with optional proxy support
+func (p *Provider) createHTTPClient() *http.Client {
+	transport := &http.Transport{}
+
+	if p.ProxyURL != "" {
+		proxyURL, err := url.Parse(p.ProxyURL)
+		if err == nil {
+			transport.Proxy = http.ProxyURL(proxyURL)
+			p.Logger.Debug("Using proxy", "url", p.ProxyURL)
+		}
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   60 * time.Second,
 	}
 }
 

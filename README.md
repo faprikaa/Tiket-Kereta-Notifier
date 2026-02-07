@@ -4,254 +4,145 @@ Bot Telegram untuk monitoring ketersediaan tiket kereta api dari TiketKai, Trave
 
 ## Features
 
-- ✅ **Multi-Provider** - Support TiketKai.com, Traveloka, dan Tiket.com
+- ✅ **Multi-Train Monitoring** - Monitor banyak kereta sekaligus
+- ✅ **Per-Train Provider** - Setiap kereta bisa pakai provider berbeda
+- ✅ **Per-Train Proxy** - Setiap kereta (tiketcom) bisa pakai proxy berbeda
+- ✅ **YAML Config** - Konfigurasi mudah via file YAML
+- ✅ **Startup Validation** - Verifikasi kereta ada sebelum monitoring
 - ✅ **Telegram Bot** - Notifikasi real-time via Telegram
-- ✅ **Webhook Mode** - Menggunakan Cloudflare Tunnel (no polling!)
-- ✅ **Auto Check** - Monitoring otomatis dengan interval kustom
-- ✅ **Target Train Filter** - Monitor kereta spesifik berdasarkan nama
-- ✅ **Smart Notification** - Hanya kirim notifikasi ketika ada kursi tersedia
-- ✅ **Startup Notification** - Notifikasi saat bot berhasil start
-- ✅ **Captcha Detection** - Deteksi Turnstile/Captcha untuk Tiket.com
-- ✅ **History** - Lihat riwayat N check terakhir via `/history`
+- ✅ **Webhook Mode** - Menggunakan Cloudflare Tunnel
+- ✅ **Smart Notification** - Kirim notifikasi hanya jika ada kursi tersedia
 
 ## Installation
 
 ```bash
-# Clone repo
 git clone https://github.com/yourusername/Tiket-Kereta-Notifier.git
 cd Tiket-Kereta-Notifier
-
-# Install dependencies
 go mod tidy
-
-# Copy config
-cp .env.example .env
-
-# Edit .env dengan konfigurasi kamu
 ```
 
-### Install Cloudflared (untuk webhook mode)
+### Dependencies
 
+**Cloudflared** (untuk webhook mode):
 ```bash
-# Windows (scoop)
+# Windows
 scoop install cloudflared
-
-# Windows (winget)
+# atau
 winget install Cloudflare.cloudflared
 
 # macOS
 brew install cloudflared
 
-# Linux
-curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
-chmod +x cloudflared
-sudo mv cloudflared /usr/local/bin/
+# Linux / Manual
+# Download dari https://github.com/cloudflare/cloudflared/releases
 ```
 
-### Install curl-impersonate (untuk Tiket.com)
-
-Tiket.com menggunakan Cloudflare protection, jadi memerlukan `curl_chrome110`:
-
+**curl-impersonate** (untuk Tiket.com provider):
 ```bash
-# Windows - Download dari release
-# https://github.com/lwthiker/curl-impersonate/releases
-
-# Linux
-curl -L https://github.com/lwthiker/curl-impersonate/releases/download/v0.5.4/curl-impersonate-v0.5.4.x86_64-linux-gnu.tar.gz -o curl-impersonate.tar.gz
-tar xf curl-impersonate.tar.gz
-sudo mv curl_chrome110 /usr/local/bin/
+# Download dari https://github.com/lwthiker/curl-impersonate/releases
+# Pastikan curl_chrome110 ada di PATH
 ```
 
 ## Configuration
 
-Edit file `.env`:
+Edit `config.yml`:
 
-```env
-# Provider: tiketkai, traveloka, atau tiketcom
-PROVIDER=tiketkai
+```yaml
+telegram:
+  bot_token: "YOUR_BOT_TOKEN"
+  chat_id: "YOUR_CHAT_ID"
 
-# Telegram Bot
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_CHAT_ID=your_chat_id_here
+webhook:
+  enabled: false
+  port: 8080
 
-# Webhook Mode (requires cloudflared)
-USE_WEBHOOK=true
-WEBHOOK_PORT=8081
+trains:
+  # Monitor BENGAWAN via TiketKai
+  - name: BENGAWAN
+    origin: LPN
+    destination: CKR
+    date: "2026-02-16"
+    provider: tiketkai
+    interval: 180
 
-# Train Configuration
-TRAIN_NAME=JAYAKARTA        # Target kereta (filter untuk /check dan scheduler)
-TRAIN_ORIGIN=LPN            # Kode stasiun asal
-TRAIN_DESTINATION=CKR       # Kode stasiun tujuan
-TRAIN_DATE=2026-02-16       # Tanggal keberangkatan (YYYY-MM-DD)
-TRAIN_INTERVAL=60           # Interval check dalam detik
+  # Monitor ARGO via Traveloka
+  - name: ARGO DWIPANGGA
+    origin: GMR
+    destination: YK
+    date: "2026-02-17"
+    provider: traveloka
+    interval: 300
 
-# Tiket.com specific (optional)
-TIKETCOM_PROXY_URL=socks5h://127.0.0.1:40000   # SOCKS5 proxy jika diperlukan
+  # Monitor via Tiket.com dengan proxy
+  - name: GAJAYANA
+    origin: BD
+    destination: SGU
+    date: "2026-02-18"
+    provider: tiketcom
+    proxy_url: "socks5h://127.0.0.1:40000"
+    interval: 120
 ```
+
+### Train Config Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Nama kereta (filter/target) |
+| `origin` | Yes | Kode stasiun asal |
+| `destination` | Yes | Kode stasiun tujuan |
+| `date` | Yes | Tanggal (YYYY-MM-DD) |
+| `provider` | Yes | `tiketkai`, `traveloka`, atau `tiketcom` |
+| `interval` | No | Interval check dalam detik (default: 300) |
+| `proxy_url` | No | SOCKS5 proxy untuk tiketcom |
 
 ## Usage
 
 ```bash
-# Run dengan provider dari .env
-go run ./cmd/main.go
+# Pakai config.yml default
+go run cmd/main.go
 
-# Atau override provider via command line
-go run ./cmd/main.go tiketkai
-go run ./cmd/main.go traveloka
-go run ./cmd/main.go tiketcom
-go run ./cmd/main.go help
-```
-
-## Webhook vs Polling Mode
-
-| Mode | Config | Description |
-|------|--------|-------------|
-| **Webhook** | `USE_WEBHOOK=true` | Menggunakan Cloudflare Tunnel, lebih responsif |
-| **Polling** | `USE_WEBHOOK=false` | Fallback, tidak perlu cloudflared |
-
-Webhook mode akan:
-1. Start HTTP server di `localhost:WEBHOOK_PORT`
-2. Spawn `cloudflared tunnel` untuk dapatkan URL publik
-3. Set Telegram webhook ke URL tersebut
-4. Terima updates langsung via HTTP POST
-5. Kirim notifikasi startup ke Telegram
-
-## Architecture
-
-```mermaid
-graph TB
-    subgraph "Train Ticket Notifier"
-        Main[main.go] --> Config[Config Loader]
-        Main --> Provider{Provider Factory}
-        
-        Provider --> TiketKai[TiketKai Provider]
-        Provider --> Traveloka[Traveloka Provider]
-        Provider --> TiketCom[Tiket.com Provider]
-        
-        TiketKai --> |AES Encrypted| TKAI_API[(TiketKai API)]
-        Traveloka --> |JSON| TVL_API[(Traveloka API)]
-        TiketCom --> |curl_chrome110| TKT_API[(Tiket.com API)]
-        
-        Main --> Scheduler[Scheduler]
-        Scheduler --> |Check Availability| Provider
-        
-        Main --> TGBot[Telegram Bot]
-        TGBot --> |Commands| Provider
-    end
-    
-    subgraph "External Services"
-        TGBot <--> |Webhook| Cloudflared[Cloudflare Tunnel]
-        Cloudflared <--> Telegram[Telegram API]
-    end
-    
-    Scheduler --> |Notify| Telegram
-```
-
-### Scheduler Flow
-
-```mermaid
-sequenceDiagram
-    participant S as Scheduler
-    participant P as Provider
-    participant API as Train API
-    participant T as Telegram
-
-    loop Every TRAIN_INTERVAL
-        S->>P: Search()
-        P->>API: Request train data
-        API-->>P: Train list
-        P-->>S: Available trains
-        
-        alt Seats Available
-            S->>T: Send notification
-            T-->>S: Message sent
-        else No Seats
-            Note over S: Skip notification
-        end
-    end
+# Pakai custom config file
+go run cmd/main.go -config production.yml
+go run cmd/main.go -c myconfig.yml
 ```
 
 ## Telegram Commands
 
 | Command | Description |
 |---------|-------------|
-| `/check` | Check target train (berdasarkan TRAIN_NAME) |
-| `/list` | List semua kereta tersedia (tanpa filter) |
-| `/history [n]` | Tampilkan n hasil check terakhir (default 3) |
-| `/status` | Status detail: uptime, total checks, last check, target info |
+| `/list` | List semua kereta yang dikonfigurasi |
+| `/check [n]` | Check kereta #n (atau semua jika tanpa arg) |
+| `/status [n]` | Status detail kereta #n (atau summary) |
+| `/history [n] [count]` | Riwayat check kereta #n |
 | `/help` | Bantuan |
 
-## How It Works
-
-### Scheduler
-- Bot akan check ketersediaan kereta secara berkala sesuai `TRAIN_INTERVAL`
-- Hanya kereta dengan nama yang cocok dengan `TRAIN_NAME` yang akan dimonitor
-- Notifikasi **hanya dikirim jika ada kursi tersedia** (bukan 0)
-
-### Commands
-- `/check` - Menggunakan filter `TRAIN_NAME`, hanya tampilkan target kereta
-- `/list` - Tampilkan **semua** kereta tanpa filter
-
-## Project Structure
-
+**Contoh:**
 ```
-├── cmd/
-│   ├── main.go              # Entry point
-│   └── test.go              # Test utilities
-├── internal/
-│   ├── bot/                 # Bot commands registration
-│   ├── common/              # Shared interfaces (Provider, Train, CheckResult)
-│   ├── config/              # Environment loading & validation
-│   ├── history/             # History storage for check results
-│   ├── telegram/            # Telegram bot + webhook
-│   ├── tiketcom/            # Tiket.com provider (curl-impersonate)
-│   ├── tiketkai/            # TiketKai provider
-│   ├── traveloka/           # Traveloka provider
-│   └── tunnel/              # Cloudflare tunnel management
-├── .env.example             # Template config
-├── .gitignore
-└── go.mod
+/list              # Lihat semua kereta
+/check             # Check semua kereta
+/check 1           # Check kereta pertama saja
+/status 2          # Status detail kereta kedua
+/history 1 5       # 5 history terakhir kereta pertama
 ```
 
 ## Providers
 
-### TiketKai
-- API: `https://sc-microservice-tiketkai.bmsecure.id`
-- Menggunakan AES encryption untuk payload
-- Support filter berdasarkan nama kereta
-
-### Traveloka
-- API: `https://www.traveloka.com/api/v2/train`
-- Direct JSON API
-- Support filter berdasarkan nama kereta
-
-### Tiket.com
-- API: `https://www.tiket.com/ms-gateway/tix-train-search-v2`
-- Menggunakan `curl_chrome110` untuk bypass Cloudflare
-- Support filter berdasarkan nama kereta
-- Optional: SOCKS5 proxy via `TIKETCOM_PROXY_URL`
+| Provider | API | Notes |
+|----------|-----|-------|
+| **tiketkai** | TiketKai.com | AES encrypted |
+| **traveloka** | Traveloka.com | Direct JSON |
+| **tiketcom** | Tiket.com | Butuh curl_chrome110, support proxy |
 
 ## Troubleshooting
 
-### API Error RC: 89 (TiketKai)
-Payload atau headers tidak sesuai. Pastikan menggunakan versi terbaru.
+### Train not found on startup
+Pastikan nama kereta sesuai dengan yang tampil di provider. Jalankan tanpa filter `name` dulu untuk lihat kereta yang tersedia.
 
-### Context Deadline Exceeded
-API timeout. Timeout sudah diset 30 detik, coba lagi.
+### Tiket.com blocked by Turnstile
+Gunakan proxy via `proxy_url` atau pastikan `curl_chrome110` terinstall.
 
-### Tunnel Not Accessible
-Cloudflare tunnel gagal. Pastikan `cloudflared` terinstall dan bisa diakses.
-
-### Tiket.com Blocked by Turnstile/Captcha
-Cloudflare protection aktif. Coba:
-1. Gunakan proxy via `TIKETCOM_PROXY_URL`
-2. Pastikan `curl_chrome110` terinstall dengan benar
-
-## Credits
-
-🤖 **This project was entirely created by Claude** via Antigravity IDE - from code architecture, implementation, to documentation.
-
-👨‍💻 **Project directed by me** - requirements, design decisions, and quality assurance.
+### Tunnel not accessible
+Pastikan `cloudflared` terinstall dan webhook.enabled = true.
 
 ## License
 

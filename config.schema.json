@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Tiket Kereta Notifier Config",
+  "type": "object",
+  "required": ["telegram", "trains"],
+  "properties": {
+    "telegram": {
+      "type": "object",
+      "required": ["bot_token", "chat_id"],
+      "properties": {
+        "bot_token": {
+          "type": "string",
+          "description": "Telegram bot token from @BotFather"
+        },
+        "chat_id": {
+          "type": "string",
+          "description": "Telegram chat ID untuk notifikasi"
+        }
+      }
+    },
+    "webhook": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable webhook mode (requires cloudflared)"
+        },
+        "port": {
+          "type": "integer",
+          "default": 8080,
+          "description": "Port untuk webhook server"
+        }
+      }
+    },
+    "trains": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "origin", "destination", "date", "provider"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Nama kereta yang ingin dimonitor"
+          },
+          "origin": {
+            "type": "string",
+            "description": "Kode stasiun asal (contoh: GMR, BD, LPN)"
+          },
+          "destination": {
+            "type": "string",
+            "description": "Kode stasiun tujuan (contoh: YK, SGU, CKR)"
+          },
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Tanggal keberangkatan (format: YYYY-MM-DD)"
+          },
+          "provider": {
+            "type": "string",
+            "enum": ["tiketkai", "traveloka", "tiketcom"],
+            "description": "Provider untuk pencarian tiket"
+          },
+          "interval": {
+            "type": "integer",
+            "default": 300,
+            "minimum": 60,
+            "description": "Interval check dalam detik (minimum 60)"
+          },
+          "proxy_url": {
+            "type": "string",
+            "description": "SOCKS5 proxy URL (contoh: socks5h://127.0.0.1:40000)"
+          }
+        }
+      }
+    }
+  }
+}
