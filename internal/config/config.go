@@ -1,124 +1,139 @@
 package config
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
-	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v3"
 )
 
-type Config struct {
-	Provider string
+// TrainConfig represents configuration for a single train to monitor
+type TrainConfig struct {
+	Name        string `yaml:"name"`
+	Origin      string `yaml:"origin"`
+	Destination string `yaml:"destination"`
+	Date        string `yaml:"date"` // YYYY-MM-DD
+	Provider    string `yaml:"provider"`
+	Interval    int    `yaml:"interval"` // seconds
+	ProxyURL    string `yaml:"proxy_url,omitempty"`
 
-	// Train Config
-	TrainName   string
-	Origin      string
-	Destination string
-	Date        string        // YYYY-MM-DD
-	Interval    time.Duration // Polling interval
-
-	// Telegram
-	TelegramToken   string
-	TelegramChatIDs []string
-
-	// Webhook
-	UseWebhook  bool
-	WebhookPort int
+	// Computed fields (not from YAML)
+	IntervalDuration time.Duration `yaml:"-"`
 }
+
+// TelegramConfig holds Telegram bot settings
+type TelegramConfig struct {
+	BotToken string `yaml:"bot_token"`
+	ChatID   string `yaml:"chat_id"`
+}
+
+// WebhookConfig holds webhook settings
+type WebhookConfig struct {
+	Enabled bool `yaml:"enabled"`
+	Port    int  `yaml:"port"`
+}
+
+// Config represents the full application configuration
+type Config struct {
+	Telegram TelegramConfig `yaml:"telegram"`
+	Webhook  WebhookConfig  `yaml:"webhook"`
+	Trains   []TrainConfig  `yaml:"trains"`
+}
+
+var configPath string
 
 func init() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using system environment variables")
-	}
+	// Define -config / -c flag
+	flag.StringVar(&configPath, "config", "config.yml", "Path to YAML config file")
+	flag.StringVar(&configPath, "c", "config.yml", "Path to YAML config file (shorthand)")
 }
 
-// Load returns the application configuration
+// Load returns the application configuration from YAML file
 func Load() *Config {
-	intervalStr := GetEnv("TRAIN_INTERVAL", "300") // default 5m
-	intervalSec, _ := strconv.Atoi(intervalStr)
-	if intervalSec <= 0 {
-		intervalSec = 300
+	// Parse flags if not already parsed
+	if !flag.Parsed() {
+		flag.Parse()
 	}
 
-	webhookPortStr := GetEnv("WEBHOOK_PORT", "8080")
-	webhookPort, _ := strconv.Atoi(webhookPortStr)
+	cfg := &Config{}
 
-	chatIDsStr := GetEnv("TELEGRAM_CHAT_ID", "")
-	var chatIDs []string
-	if chatIDsStr != "" {
-		for _, id := range strings.Split(chatIDsStr, ",") {
-			if trimmed := strings.TrimSpace(id); trimmed != "" {
-				chatIDs = append(chatIDs, trimmed)
-			}
-		}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		log.Fatalf("Failed to read config file %s: %v", configPath, err)
 	}
 
-	return &Config{
-		Provider:        GetEnv("PROVIDER", "traveloka"),
-		TrainName:       GetEnv("TRAIN_NAME", ""),
-		Origin:          GetEnv("TRAIN_ORIGIN", GetEnv("TIKETKAI_ORIGIN", "")),
-		Destination:     GetEnv("TRAIN_DESTINATION", GetEnv("TIKETKAI_DESTINATION", "")),
-		Date:            GetEnv("TRAIN_DATE", ""),
-		Interval:        time.Duration(intervalSec) * time.Second,
-		TelegramToken:   GetEnv("TELEGRAM_BOT_TOKEN", ""),
-		TelegramChatIDs: chatIDs,
-		UseWebhook:      strings.ToLower(GetEnv("USE_WEBHOOK", "false")) == "true",
-		WebhookPort:     webhookPort,
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		log.Fatalf("Failed to parse YAML config: %v", err)
 	}
+
+	// Process train configs
+	cfg.processTrainConfigs()
+
+	return cfg
 }
 
-// GetEnv returns value or default
-func GetEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+// processTrainConfigs computes derived fields for train configs
+func (c *Config) processTrainConfigs() {
+	for i := range c.Trains {
+		if c.Trains[i].Interval <= 0 {
+			c.Trains[i].Interval = 300 // default 5 minutes
+		}
+		c.Trains[i].IntervalDuration = time.Duration(c.Trains[i].Interval) * time.Second
 	}
-	return defaultValue
+
+	// Set default webhook port
+	if c.Webhook.Port == 0 {
+		c.Webhook.Port = 8080
+	}
 }
 
 // Validate checks required configuration fields
 func (c *Config) Validate() error {
-	if c.TelegramToken == "" {
-		return fmt.Errorf("TELEGRAM_BOT_TOKEN is required")
+	if c.Telegram.BotToken == "" {
+		return fmt.Errorf("telegram.bot_token is required in config.yml")
 	}
-	if len(c.TelegramChatIDs) == 0 {
-		return fmt.Errorf("TELEGRAM_CHAT_ID is required")
+	if c.Telegram.ChatID == "" {
+		return fmt.Errorf("telegram.chat_id is required in config.yml")
 	}
-	return nil
-}
-
-// ValidateTrainConfig checks train-specific configuration
-func (c *Config) ValidateTrainConfig() error {
-	if c.Origin == "" {
-		return fmt.Errorf("TRAIN_ORIGIN is required")
-	}
-	if c.Destination == "" {
-		return fmt.Errorf("TRAIN_DESTINATION is required")
+	if len(c.Trains) == 0 {
+		return fmt.Errorf("at least one train configuration is required")
 	}
 	return nil
 }
 
-// DateYYYYMMDD returns date in YYYYMMDD format for Tiket.com
-// Exits if TRAIN_DATE is not set
-func (c *Config) DateYYYYMMDD() string {
-	if c.Date == "" {
-		log.Fatal("TRAIN_DATE is required")
-	}
-	return strings.ReplaceAll(c.Date, "-", "")
+// TrainConfig helper methods
+
+// DateYYYYMMDD returns date in YYYYMMDD format
+func (t *TrainConfig) DateYYYYMMDD() string {
+	return strings.ReplaceAll(t.Date, "-", "")
 }
 
-// DateParts returns day, month, year for Traveloka
-// Exits if TRAIN_DATE is not set or invalid
-func (c *Config) DateParts() (day, month, year int) {
-	if c.Date == "" {
-		log.Fatal("TRAIN_DATE is required")
-	}
-	t, err := time.Parse("2006-01-02", c.Date)
+// DateParts returns day, month, year
+func (t *TrainConfig) DateParts() (day, month, year int) {
+	parsed, err := time.Parse("2006-01-02", t.Date)
 	if err != nil {
-		log.Fatalf("Invalid TRAIN_DATE format (expected YYYY-MM-DD): %v", err)
+		log.Fatalf("Invalid date format for train %s (expected YYYY-MM-DD): %v", t.Name, err)
 	}
-	return t.Day(), int(t.Month()), t.Year()
+	return parsed.Day(), int(parsed.Month()), parsed.Year()
+}
+
+// Validate checks if train config is valid
+func (t *TrainConfig) Validate() error {
+	if t.Origin == "" {
+		return fmt.Errorf("origin is required for train %s", t.Name)
+	}
+	if t.Destination == "" {
+		return fmt.Errorf("destination is required for train %s", t.Name)
+	}
+	if t.Date == "" {
+		return fmt.Errorf("date is required for train %s", t.Name)
+	}
+	if t.Provider == "" {
+		return fmt.Errorf("provider is required for train %s", t.Name)
+	}
+	return nil
 }

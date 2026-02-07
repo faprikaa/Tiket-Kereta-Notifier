@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -28,12 +29,13 @@ type Provider struct {
 	Logger        *slog.Logger
 	TrainName     string        // Optional: specific train to monitor
 	CheckInterval time.Duration // Polling interval
+	ProxyURL      string        // Optional SOCKS5 proxy
 	history       *history.Store
 	status        *common.StatusTracker
 }
 
 // NewProvider creates a new Traveloka provider
-func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int, trainName string, interval time.Duration) *Provider {
+func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int, trainName string, interval time.Duration, proxyURL string) *Provider {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
@@ -45,6 +47,7 @@ func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int,
 		Year:          year,
 		TrainName:     trainName,
 		CheckInterval: interval,
+		ProxyURL:      proxyURL,
 		Logger:        logger,
 		history:       history.NewStore(100),
 		status:        common.NewStatusTracker(),
@@ -140,7 +143,7 @@ func (p *Provider) Search(ctx context.Context) (trains []common.Train, err error
 		}
 	}()
 
-	client := &http.Client{}
+	client := p.createHTTPClient()
 
 	payload := fmt.Sprintf(`{"fields":[],"data":{"departureDate":{"day":%d,"month":%d,"year":%d},"returnDate":null,"destination":"%s","origin":"%s","numOfAdult":1,"numOfInfant":0,"providerType":"KAI","currency":"IDR","trackingMap":{"utmId":null,"utmEntryTimeMillis":0}},"clientInterface":"desktop"}`,
 		p.Day, p.Month, p.Year, p.Destination, p.Origin)
@@ -322,4 +325,22 @@ func FindTrain(trains []common.Train, name string) *common.Train {
 		}
 	}
 	return nil
+}
+
+// createHTTPClient creates an HTTP client with optional proxy support
+func (p *Provider) createHTTPClient() *http.Client {
+	transport := &http.Transport{}
+
+	if p.ProxyURL != "" {
+		proxyURL, err := url.Parse(p.ProxyURL)
+		if err == nil {
+			transport.Proxy = http.ProxyURL(proxyURL)
+			p.Logger.Debug("Using proxy", "url", p.ProxyURL)
+		}
+	}
+
+	return &http.Client{
+		Transport: transport,
+		Timeout:   60 * time.Second,
+	}
 }

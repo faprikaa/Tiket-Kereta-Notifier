@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -32,9 +31,7 @@ type Provider struct {
 }
 
 // NewProvider creates a new Tiket.com provider
-func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration) *Provider {
-	proxyURL := os.Getenv("TIKETCOM_PROXY_URL") // Optional: set to use proxy
-
+func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, proxyURL string) *Provider {
 	return &Provider{
 		Logger:        logger,
 		Origin:        origin,
