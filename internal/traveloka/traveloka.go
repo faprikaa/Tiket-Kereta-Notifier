@@ -101,9 +101,10 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			})
 
 			if len(availableTrains) > 0 {
-				msg := fmt.Sprintf("Target Train Available! (%d found)\n", len(availableTrains))
+				msg := fmt.Sprintf("✈️ TRAVELOKA [%d-%02d-%02d] %s→%s\n✅ %s tersedia! (%d found)\n\n",
+					p.Year, p.Month, p.Day, p.Origin, p.Destination, p.TrainName, len(availableTrains))
 				for _, t := range availableTrains {
-					msg += fmt.Sprintf("- %s: %s seats (%s)\n", t.Name, t.SeatsLeft, t.Price)
+					msg += fmt.Sprintf("• %s\n  💺 %s seats @ %s\n", t.Name, t.SeatsLeft, t.Price)
 				}
 				notifyFunc(msg)
 			}
