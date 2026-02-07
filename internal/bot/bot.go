@@ -22,16 +22,50 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		// If index specified, check single train
 		if args != "" {
 			if idx, err := strconv.Atoi(args); err == nil && idx >= 1 && idx <= len(providers) {
-				checkSingleTrain(ctx, chatID, providers[idx-1], cfg.Trains[idx-1])
+				result := checkTrainResult(ctx, providers[idx-1], cfg.Trains[idx-1])
+				telegram.SendMessage(result, chatID)
 				return
 			}
 		}
 
-		// Check all trains
-		telegram.SendMessage("🔍 Checking all trains...", chatID)
+		// Check all trains - consolidate results
+		telegram.SendMessage(fmt.Sprintf("🔍 Checking %d trains...", len(providers)), chatID)
+
+		var sb strings.Builder
+		availableCount := 0
+
 		for i, provider := range providers {
-			checkSingleTrain(ctx, chatID, provider, cfg.Trains[i])
+			trainCfg := cfg.Trains[i]
+			trains, err := provider.Search(ctx)
+
+			if err != nil {
+				sb.WriteString(fmt.Sprintf("❌ #%d %s [%s] %s: Error\n", i+1, trainCfg.Name, trainCfg.Date, trainCfg.Provider))
+				continue
+			}
+
+			// Filter for available
+			var available []common.Train
+			for _, t := range trains {
+				if t.Availability == "AVAILABLE" || (t.SeatsLeft != "0" && t.SeatsLeft != "") {
+					available = append(available, t)
+				}
+			}
+
+			if len(available) > 0 {
+				availableCount++
+				sb.WriteString(fmt.Sprintf("✅ #%d %s [%s] %s: %d tersedia!\n",
+					i+1, trainCfg.Name, trainCfg.Date, trainCfg.Provider, len(available)))
+				for _, t := range available {
+					sb.WriteString(fmt.Sprintf("   💺 %s seats @ Rp%s\n", t.SeatsLeft, t.Price))
+				}
+			} else {
+				sb.WriteString(fmt.Sprintf("⛔ #%d %s [%s] %s: Habis\n",
+					i+1, trainCfg.Name, trainCfg.Date, trainCfg.Provider))
+			}
 		}
+
+		header := fmt.Sprintf("📊 Hasil Check (%d/%d tersedia):\n\n", availableCount, len(providers))
+		telegram.SendMessage(header+sb.String(), chatID)
 	})
 
 	// Command: /list - List all configured trains with their status
@@ -165,39 +199,36 @@ Examples:
 	})
 }
 
-// checkSingleTrain checks availability for a single train
-func checkSingleTrain(ctx context.Context, chatID string, provider common.Provider, trainCfg config.TrainConfig) {
-	telegram.SendMessage(fmt.Sprintf("🔍 Checking %s (%s → %s)...", trainCfg.Name, trainCfg.Origin, trainCfg.Destination), chatID)
-
+// checkTrainResult checks availability and returns formatted result string
+func checkTrainResult(ctx context.Context, provider common.Provider, trainCfg config.TrainConfig) string {
 	trains, err := provider.Search(ctx)
 	if err != nil {
-		telegram.SendMessage(fmt.Sprintf("❌ %s: Error - %v", trainCfg.Name, err), chatID)
-		return
+		return fmt.Sprintf("❌ %s [%s] %s\n   Error: %v", trainCfg.Name, trainCfg.Date, trainCfg.Provider, err)
 	}
 
 	if len(trains) == 0 {
-		telegram.SendMessage(fmt.Sprintf("❌ %s: No trains found", trainCfg.Name), chatID)
-		return
+		return fmt.Sprintf("❌ %s [%s] %s\n   No trains found", trainCfg.Name, trainCfg.Date, trainCfg.Provider)
 	}
 
 	// Filter for available trains
 	var available []common.Train
 	for _, t := range trains {
-		if t.Availability == "AVAILABLE" || t.SeatsLeft != "0" {
+		if t.Availability == "AVAILABLE" || (t.SeatsLeft != "0" && t.SeatsLeft != "") {
 			available = append(available, t)
 		}
 	}
 
 	if len(available) > 0 {
-		msg := fmt.Sprintf("✅ %s: %d available!\n\n", trainCfg.Name, len(available))
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("✅ %s [%s] %s: %d tersedia!\n", trainCfg.Name, trainCfg.Date, trainCfg.Provider, len(available)))
 		for _, t := range available {
-			msg += fmt.Sprintf("🚂 %s\n⏰ %s → %s\n💺 %s seats | 💰 %s\n\n",
-				t.Name, t.DepartureTime, t.ArrivalTime, t.SeatsLeft, t.Price)
+			sb.WriteString(fmt.Sprintf("   🚂 %s\n   ⏰ %s → %s\n   💺 %s seats @ Rp%s\n",
+				t.Name, t.DepartureTime, t.ArrivalTime, t.SeatsLeft, t.Price))
 		}
-		telegram.SendMessage(msg, chatID)
-	} else {
-		telegram.SendMessage(fmt.Sprintf("⛔ %s: All %d trains fully booked", trainCfg.Name, len(trains)), chatID)
+		return sb.String()
 	}
+
+	return fmt.Sprintf("⛔ %s [%s] %s: Habis (%d kereta full)", trainCfg.Name, trainCfg.Date, trainCfg.Provider, len(trains))
 }
 
 // showTrainStatus shows detailed status for a single train
