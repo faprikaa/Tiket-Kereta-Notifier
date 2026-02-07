@@ -68,8 +68,40 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		telegram.SendMessage(header+sb.String(), chatID)
 	})
 
-	// Command: /list - List all configured trains with their status
+	// Command: /list [index] - List all configured trains or show specific train
 	bot.RegisterCommand("/list", func(ctx context.Context, chatID, args string) {
+		args = strings.TrimSpace(args)
+
+		// If index specified, show single train details
+		if args != "" {
+			if idx, err := strconv.Atoi(args); err == nil && idx >= 1 && idx <= len(providers) {
+				trainCfg := cfg.Trains[idx-1]
+				status := providers[idx-1].GetStatus()
+				lastCheck := "Never"
+				if !status.LastCheckTime.IsZero() {
+					lastCheck = formatDuration(time.Since(status.LastCheckTime)) + " ago"
+				}
+
+				msg := fmt.Sprintf("🚂 Train #%d: %s\n\n", idx, trainCfg.Name)
+				msg += fmt.Sprintf("📍 Route: %s → %s\n", trainCfg.Origin, trainCfg.Destination)
+				msg += fmt.Sprintf("📅 Date: %s\n", trainCfg.Date)
+				msg += fmt.Sprintf("🔌 Provider: %s\n", trainCfg.Provider)
+				msg += fmt.Sprintf("⏱️ Interval: %s\n", trainCfg.IntervalDuration)
+				msg += fmt.Sprintf("🌐 Proxy: %s\n", func() string {
+					if trainCfg.ProxyURL != "" {
+						return "Yes"
+					} else {
+						return "No"
+					}
+				}())
+				msg += fmt.Sprintf("\n📊 Last check: %s", lastCheck)
+
+				telegram.SendMessage(msg, chatID)
+				return
+			}
+		}
+
+		// List all trains
 		var sb strings.Builder
 		sb.WriteString("🚂 Configured Trains:\n\n")
 
@@ -80,14 +112,11 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 				lastCheck = formatDuration(time.Since(status.LastCheckTime)) + " ago"
 			}
 
-			sb.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, trainCfg.Name))
-			sb.WriteString(fmt.Sprintf("   📍 %s → %s\n", trainCfg.Origin, trainCfg.Destination))
-			sb.WriteString(fmt.Sprintf("   📅 %s | 🔌 %s\n", trainCfg.Date, trainCfg.Provider))
-			sb.WriteString(fmt.Sprintf("   ⏱️ Last: %s\n\n", lastCheck))
+			sb.WriteString(fmt.Sprintf("%d. %s [%s] %s\n", i+1, trainCfg.Name, trainCfg.Date, trainCfg.Provider))
+			sb.WriteString(fmt.Sprintf("   📍 %s → %s | ⏱️ %s\n\n", trainCfg.Origin, trainCfg.Destination, lastCheck))
 		}
 
-		sb.WriteString("Use /check [n] to check specific train\n")
-		sb.WriteString("Use /status [n] for detailed status")
+		sb.WriteString("Use /list [n] for train details")
 
 		telegram.SendMessage(sb.String(), chatID)
 	})
