@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=./config.schema.json
+# Tiket Kereta Notifier - Configuration
+# Copy this file and modify as needed
+
+telegram:
+  bot_token: "79481236:xxxxxx-xxxxx-x"
+  chat_id: "-4947123402"
+
+webhook:
+  enabled: true
+  port: 8080
+
+trains:
+  # Example: Monitor BENGAWAN train via TiketKai
+  - name: BENGAWAN
+    origin: LPN
+    destination: CKR
+    date: "2026-02-16"
+    provider: traveloka
+    interval: 300
+
+  # Example: Monitor ARGO DWIPANGGA via Traveloka
+  # - name: ARGO DWIPANGGA
+  #   origin: GMR
+  #   destination: YK
+  #   date: "2026-02-17"
+  #   provider: traveloka
+  #   interval: 300
+
+  # Example: Monitor via Tiket.com with proxy
+  # - name: GAJAYANA
+  #   origin: BD
+  #   destination: SGU
+  #   date: "2026-02-18"
+  #   provider: tiketcom
+  #   proxy_url: "socks5h://127.0.0.1:40000"
+  #   interval: 120
