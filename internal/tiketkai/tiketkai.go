@@ -164,6 +164,8 @@ func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 		return nil, fmt.Errorf("failed to parse train data: %w", err)
 	}
 
+	p.Logger.Debug("TiketKai raw train count", "count", len(trainData))
+
 	var trains []common.Train
 	for _, tr := range trainData {
 		seatsAvailable := "0"
