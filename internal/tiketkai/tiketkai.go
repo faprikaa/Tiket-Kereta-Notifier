@@ -205,17 +205,16 @@ func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 			}
 		}
 
-		if availStatus == "AVAILABLE" {
-			trains = append(trains, common.Train{
-				Name:          tr.TrainName,
-				Class:         "ECO", // Simplified
-				Price:         minPrice,
-				DepartureTime: tr.DepartureTime,
-				ArrivalTime:   tr.ArrivalTime,
-				Availability:  availStatus,
-				SeatsLeft:     seatsAvailable,
-			})
-		}
+		// Return all trains (including fully booked) for validation
+		trains = append(trains, common.Train{
+			Name:          tr.TrainName,
+			Class:         "ECO", // Simplified
+			Price:         minPrice,
+			DepartureTime: tr.DepartureTime,
+			ArrivalTime:   tr.ArrivalTime,
+			Availability:  availStatus,
+			SeatsLeft:     seatsAvailable,
+		})
 	}
 
 	// Filter by TrainName if configured

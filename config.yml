@@ -3,12 +3,12 @@
 # Copy this file and modify as needed
 
 telegram:
-  bot_token: "YOUR_BOT_TOKEN_HERE"
-  chat_id: "YOUR_CHAT_ID_HERE"
+  bot_token: "7948370586:AAEVYPxaxX2qgy-9l5_abm57o-FiVcM7bYg"
+  chat_id: "-4947978402"
 
 webhook:
-  enabled: false
-  port: 8080
+  enabled: true
+  port: 8081
 
 trains:
   # Example: Monitor BENGAWAN train via TiketKai
@@ -16,8 +16,47 @@ trains:
     origin: LPN
     destination: CKR
     date: "2026-02-16"
+    provider: traveloka
+    interval: 300
+    
+  - name: BENGAWAN
+    origin: LPN
+    destination: CKR
+    date: "2026-02-16"
     provider: tiketkai
-    interval: 180  # check every 3 minutes
+    interval: 300
+
+  - name: BENGAWAN
+    origin: LPN
+    destination: CKR
+    date: "2026-02-16"
+    provider: tiketcom
+    proxy_url: "socks5h://127.0.0.1:40000"
+    interval: 300
+
+  - name: BENGAWAN
+    origin: LPN
+    destination: CKR
+    date: "2026-02-15"
+    provider: traveloka
+    interval: 300
+    
+  - name: BENGAWAN
+    origin: LPN
+    destination: CKR
+    date: "2026-02-15"
+    provider: tiketkai
+    interval: 300
+
+  - name: BENGAWAN
+    origin: LPN
+    destination: CKR
+    date: "2026-02-15"
+    provider: tiketcom
+    proxy_url: "socks5h://127.0.0.1:40000"
+    interval: 300
+
+
 
   # Example: Monitor ARGO DWIPANGGA via Traveloka
   # - name: ARGO DWIPANGGA
