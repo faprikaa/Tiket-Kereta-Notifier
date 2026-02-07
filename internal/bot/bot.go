@@ -68,6 +68,65 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		telegram.SendMessage(header+sb.String(), chatID)
 	})
 
+	// Command: /all <index> - Get all trains on route (no name filter)
+	bot.RegisterCommand("/all", func(ctx context.Context, chatID, args string) {
+		args = strings.TrimSpace(args)
+
+		if args == "" {
+			telegram.SendMessage("❌ Usage: /all <index>\nExample: /all 1", chatID)
+			return
+		}
+
+		idx, err := strconv.Atoi(args)
+		if err != nil || idx < 1 || idx > len(providers) {
+			telegram.SendMessage(fmt.Sprintf("❌ Invalid index. Use 1-%d", len(providers)), chatID)
+			return
+		}
+
+		trainCfg := cfg.Trains[idx-1]
+		provider := providers[idx-1]
+
+		telegram.SendMessage(fmt.Sprintf("📋 Fetching all trains for #%d [%s] %s...", idx, trainCfg.Date, trainCfg.Provider), chatID)
+
+		trains, err := provider.SearchAll(ctx)
+		if err != nil {
+			telegram.SendMessage(fmt.Sprintf("❌ Error: %v", err), chatID)
+			return
+		}
+
+		if len(trains) == 0 {
+			telegram.SendMessage("❌ No trains found on this route", chatID)
+			return
+		}
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("🚂 All Trains: %s → %s [%s]\n\n", trainCfg.Origin, trainCfg.Destination, trainCfg.Date))
+
+		for i, t := range trains {
+			status := "⛔"
+			if t.Availability == "AVAILABLE" || (t.SeatsLeft != "0" && t.SeatsLeft != "") {
+				status = "✅"
+			}
+			sb.WriteString(fmt.Sprintf("%d. %s %s\n", i+1, status, t.Name))
+			sb.WriteString(fmt.Sprintf("   ⏰ %s → %s\n", t.DepartureTime, t.ArrivalTime))
+			if t.SeatsLeft != "0" && t.SeatsLeft != "" {
+				sb.WriteString(fmt.Sprintf("   💺 %s seats @ Rp%s\n", t.SeatsLeft, t.Price))
+			}
+			sb.WriteString("\n")
+
+			// Break message if too long
+			if sb.Len() > 3500 {
+				telegram.SendMessage(sb.String(), chatID)
+				sb.Reset()
+			}
+		}
+
+		if sb.Len() > 0 {
+			sb.WriteString(fmt.Sprintf("Total: %d trains", len(trains)))
+			telegram.SendMessage(sb.String(), chatID)
+		}
+	})
+
 	// Command: /list [index] - List all configured trains or show specific train
 	bot.RegisterCommand("/list", func(ctx context.Context, chatID, args string) {
 		args = strings.TrimSpace(args)
