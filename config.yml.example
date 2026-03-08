@@ -37,3 +37,13 @@ trains:
   #   proxy_url: "socks5h://127.0.0.1:40000"
   #   interval: 120
   #   notes: "Liburan"
+
+  # Example: Monitor via BookingKAI (official KAI website, uses headless browser)
+  # - name: BENGAWAN
+  #   origin: CKR
+  #   destination: LPN
+  #   date: "2026-04-02"
+  #   provider: bookingkai
+  #   proxy_url: "socks5://127.0.0.1:40000"
+  #   interval: 600
+  #   notes: "Mudik lebaran"

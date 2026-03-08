@@ -173,11 +173,12 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		sb.WriteString("🚂 Configured Trains:\n")
 
 		// Provider display order and emoji mapping
-		providerOrder := []string{"traveloka", "tiketkai", "tiketcom"}
+		providerOrder := []string{"traveloka", "tiketkai", "tiketcom", "bookingkai"}
 		providerEmoji := map[string]string{
-			"traveloka": "✈️ TRAVELOKA",
-			"tiketkai":  "🚂 TIKETKAI",
-			"tiketcom":  "🎫 TIKETCOM",
+			"traveloka":  "✈️ TRAVELOKA",
+			"tiketkai":   "🚂 TIKETKAI",
+			"tiketcom":   "🎫 TIKETCOM",
+			"bookingkai": "🏛️ BOOKINGKAI",
 		}
 
 		for _, provKey := range providerOrder {

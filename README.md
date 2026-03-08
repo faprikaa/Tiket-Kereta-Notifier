@@ -1,6 +1,6 @@
 # 🚂 Train Ticket Notifier
 
-Bot Telegram untuk monitoring ketersediaan tiket kereta api dari TiketKai, Traveloka, dan Tiket.com.
+Bot Telegram untuk monitoring ketersediaan tiket kereta api dari TiketKai, Traveloka, Tiket.com, dan BookingKAI (official).
 
 ## Features
 
@@ -43,6 +43,12 @@ brew install cloudflared
 # Pastikan curl_chrome110 ada di PATH
 ```
 
+**Google Chrome** (untuk BookingKAI provider):
+```bash
+# go-rod akan otomatis download Chromium jika Chrome tidak ditemukan
+# Atau install Chrome/Chromium secara manual
+```
+
 ## Configuration
 
 Edit `config.yml`:
@@ -81,6 +87,16 @@ trains:
     provider: tiketcom
     proxy_url: "socks5h://127.0.0.1:40000"
     interval: 120
+
+  # Monitor via BookingKAI (official KAI website)
+  - name: BENGAWAN
+    origin: CKR
+    destination: LPN
+    date: "2026-04-02"
+    provider: bookingkai
+    proxy_url: "socks5://127.0.0.1:40000"
+    interval: 600
+    notes: "Mudik lebaran"
 ```
 
 ### Train Config Fields
@@ -91,9 +107,10 @@ trains:
 | `origin` | Yes | Kode stasiun asal |
 | `destination` | Yes | Kode stasiun tujuan |
 | `date` | Yes | Tanggal (YYYY-MM-DD) |
-| `provider` | Yes | `tiketkai`, `traveloka`, atau `tiketcom` |
+| `provider` | Yes | `tiketkai`, `traveloka`, `tiketcom`, atau `bookingkai` |
 | `interval` | No | Interval check dalam detik (default: 300) |
-| `proxy_url` | No | SOCKS5 proxy untuk tiketcom |
+| `proxy_url` | No | SOCKS5 proxy untuk tiketcom/bookingkai |
+| `notes` | No | Catatan opsional, muncul di /list dan notifikasi |
 
 ## Usage
 
@@ -113,6 +130,7 @@ go run cmd/main.go -c myconfig.yml
 | `/list [n]` | List semua kereta, atau detail kereta #n |
 | `/check [n]` | Check kereta #n (atau semua) |
 | `/all <n>` | Tampilkan semua kereta pada route #n (tanpa filter nama) |
+| `/toggle <n>` | Pause/resume monitoring kereta #n |
 | `/status [n]` | Status detail kereta #n (atau summary) |
 | `/history <n> [count]` | Riwayat check kereta #n |
 | `/help` | Bantuan |
@@ -124,6 +142,7 @@ go run cmd/main.go -c myconfig.yml
 /check             # Check semua kereta
 /check 1           # Check kereta pertama saja
 /all 1             # Tampilkan semua kereta pada route kereta #1
+/toggle 3          # Pause/resume kereta #3
 /status 2          # Status detail kereta kedua
 /history 1 5       # 5 history terakhir kereta pertama
 ```
@@ -131,11 +150,12 @@ go run cmd/main.go -c myconfig.yml
 ## Notification Format
 
 ```
-🎫 TIKETCOM [2026-02-16] LPN→CKR
+🎫 #3 TIKETCOM [2026-02-16] LPN→CKR
 ✅ BOGOWONTO tersedia! (2 found)
+📝 Pulang kampung
 
 • Bogowonto [Economy]
-  💺 354 seats @ Rp380000
+  💺 354 seats @ Rp380.000
 ```
 
 ## Providers
@@ -145,6 +165,7 @@ go run cmd/main.go -c myconfig.yml
 | **tiketkai** | TiketKai.com | AES encrypted |
 | **traveloka** | Traveloka.com | Direct JSON |
 | **tiketcom** | Tiket.com | Butuh curl_chrome110, support proxy |
+| **bookingkai** | booking.kai.id | Official KAI, butuh Chrome, support proxy |
 
 ## Troubleshooting
 

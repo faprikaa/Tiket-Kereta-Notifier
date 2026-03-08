@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"tiket-kereta-notifier/internal/bookingkai"
 	"tiket-kereta-notifier/internal/bot"
 	"tiket-kereta-notifier/internal/common"
 	"tiket-kereta-notifier/internal/config"
@@ -184,8 +185,21 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, trainCfg *co
 		}
 		return provider, nil
 
+	case "bookingkai":
+		return bookingkai.NewProvider(
+			logger,
+			trainCfg.Origin,
+			trainCfg.Destination,
+			trainCfg.Date,
+			trainCfg.Name,
+			trainCfg.IntervalDuration,
+			trainCfg.ProxyURL,
+			index,
+			trainCfg.Notes,
+		), nil
+
 	default:
-		return nil, fmt.Errorf("unknown provider '%s' (use: tiketkai, traveloka, tiketcom)", trainCfg.Provider)
+		return nil, fmt.Errorf("unknown provider '%s' (use: tiketkai, traveloka, tiketcom, bookingkai)", trainCfg.Provider)
 	}
 }
 

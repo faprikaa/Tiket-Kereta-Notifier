@@ -59,7 +59,7 @@
           },
           "provider": {
             "type": "string",
-            "enum": ["tiketkai", "traveloka", "tiketcom"],
+            "enum": ["tiketkai", "traveloka", "tiketcom", "bookingkai"],
             "description": "Provider untuk pencarian tiket"
           },
           "interval": {
