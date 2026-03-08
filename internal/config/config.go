@@ -20,6 +20,7 @@ type TrainConfig struct {
 	Provider    string `yaml:"provider"`
 	Interval    int    `yaml:"interval"` // seconds
 	ProxyURL    string `yaml:"proxy_url,omitempty"`
+	Notes       string `yaml:"notes,omitempty"`
 
 	// Computed fields (not from YAML)
 	IntervalDuration time.Duration `yaml:"-"`

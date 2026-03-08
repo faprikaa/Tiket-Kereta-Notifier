@@ -71,6 +71,10 @@
           "proxy_url": {
             "type": "string",
             "description": "SOCKS5 proxy URL (contoh: socks5h://127.0.0.1:40000)"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Catatan opsional, ditampilkan di /list dan notifikasi"
           }
         }
       }

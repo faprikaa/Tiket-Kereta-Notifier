@@ -18,6 +18,7 @@ trains:
     date: "2026-02-16"
     provider: traveloka
     interval: 300
+    notes: "Pulang kampung"   # optional
 
   # Example: Monitor ARGO DWIPANGGA via Traveloka
   # - name: ARGO DWIPANGGA
@@ -35,3 +36,4 @@ trains:
   #   provider: tiketcom
   #   proxy_url: "socks5h://127.0.0.1:40000"
   #   interval: 120
+  #   notes: "Liburan"

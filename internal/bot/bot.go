@@ -141,7 +141,12 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 					lastCheck = formatDuration(time.Since(status.LastCheckTime)) + " ago"
 				}
 
-				msg := fmt.Sprintf("🚂 Train #%d: %s\n\n", idx, trainCfg.Name)
+				pausedStr := ""
+				if providers[idx-1].IsPaused() {
+					pausedStr = " ⏸️ PAUSED"
+				}
+
+				msg := fmt.Sprintf("🚂 Train #%d: %s%s\n\n", idx, trainCfg.Name, pausedStr)
 				msg += fmt.Sprintf("📍 Route: %s → %s\n", trainCfg.Origin, trainCfg.Destination)
 				msg += fmt.Sprintf("📅 Date: %s\n", trainCfg.Date)
 				msg += fmt.Sprintf("🔌 Provider: %s\n", trainCfg.Provider)
@@ -153,6 +158,9 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 						return "No"
 					}
 				}())
+				if trainCfg.Notes != "" {
+					msg += fmt.Sprintf("📝 Notes: %s\n", trainCfg.Notes)
+				}
 				msg += fmt.Sprintf("\n📊 Last check: %s", lastCheck)
 
 				telegram.SendMessage(msg, chatID)
@@ -160,22 +168,59 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 			}
 		}
 
-		// List all trains
+		// List all trains, grouped by provider
 		var sb strings.Builder
-		sb.WriteString("🚂 Configured Trains:\n\n")
+		sb.WriteString("🚂 Configured Trains:\n")
 
-		for i, trainCfg := range cfg.Trains {
-			status := providers[i].GetStatus()
-			lastCheck := "Never"
-			if !status.LastCheckTime.IsZero() {
-				lastCheck = formatDuration(time.Since(status.LastCheckTime)) + " ago"
-			}
-
-			sb.WriteString(fmt.Sprintf("%d. %s [%s] %s\n", i+1, trainCfg.Name, trainCfg.Date, trainCfg.Provider))
-			sb.WriteString(fmt.Sprintf("   📍 %s → %s | ⏱️ %s\n\n", trainCfg.Origin, trainCfg.Destination, lastCheck))
+		// Provider display order and emoji mapping
+		providerOrder := []string{"traveloka", "tiketkai", "tiketcom"}
+		providerEmoji := map[string]string{
+			"traveloka": "✈️ TRAVELOKA",
+			"tiketkai":  "🚂 TIKETKAI",
+			"tiketcom":  "🎫 TIKETCOM",
 		}
 
-		sb.WriteString("Use /list [n] for train details")
+		for _, provKey := range providerOrder {
+			// Collect trains for this provider
+			var entries []string
+			for i, trainCfg := range cfg.Trains {
+				if strings.ToLower(trainCfg.Provider) != provKey {
+					continue
+				}
+
+				status := providers[i].GetStatus()
+				lastCheck := "Never"
+				if !status.LastCheckTime.IsZero() {
+					lastCheck = formatDuration(time.Since(status.LastCheckTime)) + " ago"
+				}
+
+				pausedIcon := ""
+				if providers[i].IsPaused() {
+					pausedIcon = "🔇 "
+				}
+
+				entry := fmt.Sprintf("%2d. %s%s [%s]\n    📍 %s → %s | ⏱️ %s",
+					i+1, pausedIcon, trainCfg.Name, trainCfg.Date,
+					trainCfg.Origin, trainCfg.Destination, lastCheck)
+				if trainCfg.Notes != "" {
+					entry += fmt.Sprintf("\n    📝 %s", trainCfg.Notes)
+				}
+				entries = append(entries, entry)
+			}
+
+			if len(entries) > 0 {
+				label := providerEmoji[provKey]
+				if label == "" {
+					label = provKey
+				}
+				sb.WriteString(fmt.Sprintf("\n━━ %s ━━\n", label))
+				for _, e := range entries {
+					sb.WriteString(e + "\n")
+				}
+			}
+		}
+
+		sb.WriteString("\n/list [n] details | /toggle [n] pause/resume")
 
 		telegram.SendMessage(sb.String(), chatID)
 	})
@@ -269,19 +314,50 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		telegram.SendMessage(sb.String(), chatID)
 	})
 
+	// Command: /toggle [index] - Toggle pause/resume for a specific train monitor
+	bot.RegisterCommand("/toggle", func(ctx context.Context, chatID, args string) {
+		args = strings.TrimSpace(args)
+
+		if args == "" {
+			telegram.SendMessage("❌ Usage: /toggle <index>\nExample: /toggle 1", chatID)
+			return
+		}
+
+		idx, err := strconv.Atoi(args)
+		if err != nil || idx < 1 || idx > len(providers) {
+			telegram.SendMessage(fmt.Sprintf("❌ Invalid index. Use 1-%d", len(providers)), chatID)
+			return
+		}
+
+		provider := providers[idx-1]
+		trainCfg := cfg.Trains[idx-1]
+		newState := !provider.IsPaused()
+		provider.SetPaused(newState)
+
+		if newState {
+			telegram.SendMessage(fmt.Sprintf("⏸️ Train #%d (%s) paused", idx, trainCfg.Name), chatID)
+		} else {
+			telegram.SendMessage(fmt.Sprintf("▶️ Train #%d (%s) resumed", idx, trainCfg.Name), chatID)
+		}
+	})
+
 	// Command: /help
 	bot.RegisterCommand("/help", func(ctx context.Context, chatID, args string) {
 		help := fmt.Sprintf(`🚂 Train Notifier (Monitoring %d trains)
 
 /list - List all configured trains
+/list [n] - Show train #n details
 /check [n] - Check train #n (or all)
+/all [n] - Show all trains on route #n
 /status [n] - Status of train #n (or summary)
 /history [n] [count] - History of train #n
+/toggle [n] - Pause/resume train #n
 
 Examples:
 /check 1 - Check first train only
 /check - Check all trains
-/status 2 - Detailed status of train #2`, len(providers))
+/all 3 - All trains on route #3
+/toggle 5 - Pause/resume train #5`, len(providers))
 
 		telegram.SendMessage(help, chatID)
 	})

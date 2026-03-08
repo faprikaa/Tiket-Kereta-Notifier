@@ -30,12 +30,14 @@ type Provider struct {
 	TrainName     string        // Optional: specific train to monitor
 	CheckInterval time.Duration // Polling interval
 	ProxyURL      string        // Optional SOCKS5 proxy
+	Index         int           // Global index (1-based)
+	Notes         string        // Optional user notes
 	history       *history.Store
 	status        *common.StatusTracker
 }
 
 // NewProvider creates a new Traveloka provider
-func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int, trainName string, interval time.Duration, proxyURL string) *Provider {
+func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int, trainName string, interval time.Duration, proxyURL string, index int, notes string) *Provider {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
@@ -48,6 +50,8 @@ func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int,
 		TrainName:     trainName,
 		CheckInterval: interval,
 		ProxyURL:      proxyURL,
+		Index:         index,
+		Notes:         notes,
 		Logger:        logger,
 		history:       history.NewStore(100),
 		status:        common.NewStatusTracker(),
@@ -71,6 +75,10 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if p.status.IsPaused() {
+				continue
+			}
+
 			p.status.RecordCheckStart()
 
 			p.Logger.Debug("Scheduler checking Traveloka...")
@@ -101,8 +109,12 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			})
 
 			if len(availableTrains) > 0 {
-				msg := fmt.Sprintf("✈️ TRAVELOKA [%d-%02d-%02d] %s→%s\n✅ %s tersedia! (%d found)\n\n",
-					p.Year, p.Month, p.Day, p.Origin, p.Destination, p.TrainName, len(availableTrains))
+				msg := fmt.Sprintf("✈️ #%d TRAVELOKA [%d-%02d-%02d] %s→%s\n✅ %s tersedia! (%d found)\n",
+					p.Index, p.Year, p.Month, p.Day, p.Origin, p.Destination, p.TrainName, len(availableTrains))
+				if p.Notes != "" {
+					msg += fmt.Sprintf("📝 %s\n", p.Notes)
+				}
+				msg += "\n"
 				for _, t := range availableTrains {
 					msg += fmt.Sprintf("• %s\n  💺 %s seats @ %s\n", t.Name, t.SeatsLeft, t.Price)
 				}
@@ -134,6 +146,16 @@ func (p *Provider) GetStatus() common.ProviderStatus {
 		TrainName:        p.TrainName,
 		Interval:         p.CheckInterval,
 	}
+}
+
+// SetPaused sets the paused state
+func (p *Provider) SetPaused(paused bool) {
+	p.status.SetPaused(paused)
+}
+
+// IsPaused returns whether the provider is paused
+func (p *Provider) IsPaused() bool {
+	return p.status.IsPaused()
 }
 
 // Search performs a train search using Traveloka API

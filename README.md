@@ -110,19 +110,32 @@ go run cmd/main.go -c myconfig.yml
 
 | Command | Description |
 |---------|-------------|
-| `/list` | List semua kereta yang dikonfigurasi |
-| `/check [n]` | Check kereta #n (atau semua jika tanpa arg) |
+| `/list [n]` | List semua kereta, atau detail kereta #n |
+| `/check [n]` | Check kereta #n (atau semua) |
+| `/all <n>` | Tampilkan semua kereta pada route #n (tanpa filter nama) |
 | `/status [n]` | Status detail kereta #n (atau summary) |
-| `/history [n] [count]` | Riwayat check kereta #n |
+| `/history <n> [count]` | Riwayat check kereta #n |
 | `/help` | Bantuan |
 
 **Contoh:**
 ```
 /list              # Lihat semua kereta
+/list 1            # Detail kereta #1
 /check             # Check semua kereta
 /check 1           # Check kereta pertama saja
+/all 1             # Tampilkan semua kereta pada route kereta #1
 /status 2          # Status detail kereta kedua
 /history 1 5       # 5 history terakhir kereta pertama
+```
+
+## Notification Format
+
+```
+🎫 TIKETCOM [2026-02-16] LPN→CKR
+✅ BOGOWONTO tersedia! (2 found)
+
+• Bogowonto [Economy]
+  💺 354 seats @ Rp380000
 ```
 
 ## Providers

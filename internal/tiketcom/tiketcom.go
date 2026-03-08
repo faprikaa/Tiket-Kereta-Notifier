@@ -26,12 +26,14 @@ type Provider struct {
 	TrainName     string        // Optional: specific train to monitor
 	CheckInterval time.Duration // Polling interval
 	ProxyURL      string        // SOCKS5 proxy URL (e.g., "socks5h://127.0.0.1:40000")
+	Index         int           // Global index (1-based)
+	Notes         string        // Optional user notes
 	history       *history.Store
 	status        *common.StatusTracker
 }
 
 // NewProvider creates a new Tiket.com provider
-func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, proxyURL string) *Provider {
+func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, proxyURL string, index int, notes string) *Provider {
 	return &Provider{
 		Logger:        logger,
 		Origin:        origin,
@@ -40,6 +42,8 @@ func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, inte
 		TrainName:     trainName,
 		CheckInterval: interval,
 		ProxyURL:      proxyURL,
+		Index:         index,
+		Notes:         notes,
 		history:       history.NewStore(100),
 		status:        common.NewStatusTracker(),
 	}
@@ -282,6 +286,10 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if p.status.IsPaused() {
+				continue
+			}
+
 			p.status.RecordCheckStart()
 
 			p.Logger.Debug("Scheduler checking Tiket.com...")
@@ -313,8 +321,12 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			})
 
 			if len(availableTrains) > 0 {
-				msg := fmt.Sprintf("🎫 TIKETCOM [%s] %s→%s\n✅ %s tersedia! (%d found)\n\n",
-					p.Date, p.Origin, p.Destination, p.TrainName, len(availableTrains))
+				msg := fmt.Sprintf("🎫 #%d TIKETCOM [%s] %s→%s\n✅ %s tersedia! (%d found)\n",
+					p.Index, p.Date, p.Origin, p.Destination, p.TrainName, len(availableTrains))
+				if p.Notes != "" {
+					msg += fmt.Sprintf("📝 %s\n", p.Notes)
+				}
+				msg += "\n"
 				for _, t := range availableTrains {
 					msg += fmt.Sprintf("• %s [%s]\n  💺 %s seats @ Rp%s\n", t.Name, t.Class, t.SeatsLeft, t.Price)
 				}
@@ -346,4 +358,14 @@ func (p *Provider) GetStatus() common.ProviderStatus {
 		TrainName:        p.TrainName,
 		Interval:         p.CheckInterval,
 	}
+}
+
+// SetPaused sets the paused state
+func (p *Provider) SetPaused(paused bool) {
+	p.status.SetPaused(paused)
+}
+
+// IsPaused returns whether the provider is paused
+func (p *Provider) IsPaused() bool {
+	return p.status.IsPaused()
 }

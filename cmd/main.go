@@ -96,7 +96,7 @@ func initAllProviders(ctx context.Context, logger *slog.Logger, cfg *config.Conf
 			return nil, fmt.Errorf("train #%d: %w", i+1, err)
 		}
 
-		provider, err := initProviderForTrain(ctx, logger, &trainCfg)
+		provider, err := initProviderForTrain(ctx, logger, &trainCfg, i+1)
 		if err != nil {
 			return nil, fmt.Errorf("train %s: %w", trainCfg.Name, err)
 		}
@@ -115,7 +115,7 @@ func initAllProviders(ctx context.Context, logger *slog.Logger, cfg *config.Conf
 }
 
 // initProviderForTrain creates a provider for a single train config
-func initProviderForTrain(ctx context.Context, logger *slog.Logger, trainCfg *config.TrainConfig) (common.Provider, error) {
+func initProviderForTrain(ctx context.Context, logger *slog.Logger, trainCfg *config.TrainConfig, index int) (common.Provider, error) {
 	switch strings.ToLower(trainCfg.Provider) {
 	case "tiketkai":
 		if err := tiketkai.Init(ctx); err != nil {
@@ -129,6 +129,8 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, trainCfg *co
 			trainCfg.Name,
 			trainCfg.IntervalDuration,
 			trainCfg.ProxyURL,
+			index,
+			trainCfg.Notes,
 		), nil
 
 	case "traveloka":
@@ -141,6 +143,8 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, trainCfg *co
 			trainCfg.Name,
 			trainCfg.IntervalDuration,
 			trainCfg.ProxyURL,
+			index,
+			trainCfg.Notes,
 		), nil
 
 	case "tiketcom":
@@ -152,6 +156,8 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, trainCfg *co
 			trainCfg.Name,
 			trainCfg.IntervalDuration,
 			trainCfg.ProxyURL,
+			index,
+			trainCfg.Notes,
 		)
 
 		// Test connection
@@ -190,44 +196,83 @@ func containsAny(s string, substrs ...string) bool {
 	return false
 }
 
-// validateTrainsExist performs initial search for each configured train to verify it exists
+// validateTrainsExist performs initial search for each configured train to verify it exists.
+// Trains are grouped by (name, origin, destination, date) so each unique route is only
+// validated once. If one provider errors, another provider in the same group is tried.
 func validateTrainsExist(ctx context.Context, logger *slog.Logger, providers []common.Provider, cfg *config.Config) error {
-	for i, provider := range providers {
-		trainCfg := cfg.Trains[i]
+	// Group key: name|origin|destination|date
+	type trainKey struct {
+		Name, Origin, Destination, Date string
+	}
 
-		// Skip validation if no train name filter is set (monitoring all trains on route)
+	// Collect provider indices per group
+	groups := make(map[trainKey][]int)
+	var groupOrder []trainKey // preserve order
+	for i, trainCfg := range cfg.Trains {
 		if trainCfg.Name == "" {
 			logger.Info("No train name filter, skipping validation", "route", fmt.Sprintf("%s → %s", trainCfg.Origin, trainCfg.Destination))
 			continue
 		}
-
-		logger.Info("Validating train...", "train", trainCfg.Name, "provider", trainCfg.Provider)
-
-		// Search for trains
-		trains, err := provider.Search(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to search for train %s: %w", trainCfg.Name, err)
+		key := trainKey{
+			Name:        strings.ToLower(trainCfg.Name),
+			Origin:      trainCfg.Origin,
+			Destination: trainCfg.Destination,
+			Date:        trainCfg.Date,
 		}
+		if _, exists := groups[key]; !exists {
+			groupOrder = append(groupOrder, key)
+		}
+		groups[key] = append(groups[key], i)
+	}
 
-		// Check if any result matches the configured train name
-		found := false
-		target := strings.ToLower(trainCfg.Name)
-		for _, t := range trains {
-			if strings.Contains(strings.ToLower(t.Name), target) {
-				found = true
-				logger.Info("✓ Train found", "train", trainCfg.Name, "matched", t.Name, "availability", t.Availability)
+	// Validate each group once
+	for _, key := range groupOrder {
+		indices := groups[key]
+		trainCfg := cfg.Trains[indices[0]] // representative config
+
+		validated := false
+		var lastErr error
+
+		for _, idx := range indices {
+			provider := providers[idx]
+			providerName := cfg.Trains[idx].Provider
+
+			logger.Info("Validating train...", "train", trainCfg.Name, "provider", providerName)
+
+			trains, err := provider.Search(ctx)
+			if err != nil {
+				logger.Warn("Validation failed, trying next provider",
+					"train", trainCfg.Name, "provider", providerName, "error", err)
+				lastErr = err
+				continue
+			}
+
+			// Check if any result matches the configured train name
+			target := strings.ToLower(trainCfg.Name)
+			for _, t := range trains {
+				if strings.Contains(strings.ToLower(t.Name), target) {
+					logger.Info("✓ Train found", "train", trainCfg.Name, "matched", t.Name,
+						"availability", t.Availability, "via", providerName)
+					validated = true
+					break
+				}
+			}
+
+			if validated {
 				break
 			}
-		}
 
-		if !found {
-			// List available trains for debugging
+			// Train not found in results
 			var availableNames []string
 			for _, t := range trains {
 				availableNames = append(availableNames, t.Name)
 			}
-			return fmt.Errorf("train '%s' not found on route %s → %s (date: %s). Available trains: %v",
+			lastErr = fmt.Errorf("train '%s' not found on route %s → %s (date: %s). Available: %v",
 				trainCfg.Name, trainCfg.Origin, trainCfg.Destination, trainCfg.Date, availableNames)
+		}
+
+		if !validated {
+			return fmt.Errorf("failed to validate train %s: %w", trainCfg.Name, lastErr)
 		}
 	}
 	return nil

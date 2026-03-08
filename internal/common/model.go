@@ -51,6 +51,7 @@ type StatusTracker struct {
 	LastCheckTime    time.Time
 	LastCheckFound   bool
 	LastCheckError   string
+	Paused           bool
 }
 
 // NewStatusTracker creates a new status tracker
@@ -93,6 +94,20 @@ func (s *StatusTracker) GetStats() (startTime time.Time, total, success, failed 
 	return s.StartTime, s.TotalChecks, s.SuccessfulChecks, s.FailedChecks, s.LastCheckTime, s.LastCheckFound, s.LastCheckError
 }
 
+// SetPaused sets the paused state
+func (s *StatusTracker) SetPaused(paused bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Paused = paused
+}
+
+// IsPaused returns whether the tracker is paused
+func (s *StatusTracker) IsPaused() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.Paused
+}
+
 // Provider defines the standard interface for train search providers
 type Provider interface {
 	Search(ctx context.Context) ([]Train, error)
@@ -101,4 +116,6 @@ type Provider interface {
 	StartScheduler(ctx context.Context, notifyFunc func(message string))
 	GetHistory(n int) []CheckResult
 	GetStatus() ProviderStatus
+	SetPaused(paused bool)
+	IsPaused() bool
 }
