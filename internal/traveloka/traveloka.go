@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -65,8 +66,14 @@ func (p *Provider) Name() string {
 
 // StartScheduler starts the polling loop
 func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message string)) {
-	ticker := time.NewTicker(p.CheckInterval)
-	defer ticker.Stop()
+	// jitteredInterval adds ±10% random jitter to prevent synchronized requests
+	jitteredInterval := func() time.Duration {
+		jitter := float64(p.CheckInterval) * 0.1
+		return p.CheckInterval + time.Duration(rand.Float64()*2*jitter-jitter)
+	}
+
+	timer := time.NewTimer(jitteredInterval())
+	defer timer.Stop()
 
 	p.Logger.Info("Traveloka scheduler started", "interval", p.CheckInterval, "target", p.TrainName)
 
@@ -74,7 +81,9 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-timer.C:
+			timer.Reset(jitteredInterval())
+
 			if p.status.IsPaused() {
 				continue
 			}

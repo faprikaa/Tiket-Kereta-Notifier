@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
@@ -254,14 +255,23 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(string)) 
 	}
 
 	p.Logger.Info("Starting TiketKai Polling", "interval", interval, "target", p.TrainName)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+
+	// jitteredInterval adds ±10% random jitter to prevent synchronized requests
+	jitteredInterval := func() time.Duration {
+		jitter := float64(interval) * 0.1
+		return interval + time.Duration(rand.Float64()*2*jitter-jitter)
+	}
+
+	timer := time.NewTimer(jitteredInterval())
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-timer.C:
+			timer.Reset(jitteredInterval())
+
 			if p.status.IsPaused() {
 				continue
 			}

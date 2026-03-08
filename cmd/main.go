@@ -58,16 +58,33 @@ func main() {
 	// Register Bot Commands for all providers
 	bot.RegisterCommands(tgBot, providers, cfg)
 
-	// Start all provider schedulers in background
+	// Start all provider schedulers in background with staggered delays per provider
+	// to avoid hitting the same API with multiple requests simultaneously
 	var wg sync.WaitGroup
-	for _, p := range providers {
+	providerCount := make(map[string]int) // track position per provider type
+	staggerDelay := 15 * time.Second      // delay between trains on same provider
+
+	for i, p := range providers {
 		wg.Add(1)
-		go func(provider common.Provider) {
+		providerType := strings.ToLower(cfg.Trains[i].Provider)
+		delay := time.Duration(providerCount[providerType]) * staggerDelay
+		providerCount[providerType]++
+
+		go func(provider common.Provider, initialDelay time.Duration) {
 			defer wg.Done()
+			if initialDelay > 0 {
+				logger.Info("Staggering scheduler start",
+					"provider", provider.Name(), "delay", initialDelay)
+				select {
+				case <-time.After(initialDelay):
+				case <-ctx.Done():
+					return
+				}
+			}
 			provider.StartScheduler(ctx, func(msg string) {
 				telegram.SendMessage(msg, cfg.Telegram.ChatID)
 			})
-		}(p)
+		}(p, delay)
 	}
 
 	logger.Info("Started train monitors", "count", len(providers))
