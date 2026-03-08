@@ -22,7 +22,7 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		// If index specified, check single train
 		if args != "" {
 			if idx, err := strconv.Atoi(args); err == nil && idx >= 1 && idx <= len(providers) {
-				result := checkTrainResult(ctx, providers[idx-1], cfg.Trains[idx-1])
+				result := checkTrainResult(ctx, providers[idx-1], cfg.FlatTrains[idx-1])
 				telegram.SendMessage(result, chatID)
 				return
 			}
@@ -35,11 +35,11 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		availableCount := 0
 
 		for i, provider := range providers {
-			trainCfg := cfg.Trains[i]
+			flat := cfg.FlatTrains[i]
 			trains, err := provider.Search(ctx)
 
 			if err != nil {
-				sb.WriteString(fmt.Sprintf("❌ #%d %s [%s] %s: Error\n", i+1, trainCfg.Name, trainCfg.Date, trainCfg.Provider))
+				sb.WriteString(fmt.Sprintf("❌ #%d %s [%s] %s: Error\n", i+1, flat.Name, flat.Date, flat.ProviderName))
 				continue
 			}
 
@@ -54,13 +54,13 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 			if len(available) > 0 {
 				availableCount++
 				sb.WriteString(fmt.Sprintf("✅ #%d %s [%s] %s: %d tersedia!\n",
-					i+1, trainCfg.Name, trainCfg.Date, trainCfg.Provider, len(available)))
+					i+1, flat.Name, flat.Date, flat.ProviderName, len(available)))
 				for _, t := range available {
 					sb.WriteString(fmt.Sprintf("   💺 %s seats @ Rp%s\n", t.SeatsLeft, t.Price))
 				}
 			} else {
 				sb.WriteString(fmt.Sprintf("⛔ #%d %s [%s] %s: Habis\n",
-					i+1, trainCfg.Name, trainCfg.Date, trainCfg.Provider))
+					i+1, flat.Name, flat.Date, flat.ProviderName))
 			}
 		}
 
@@ -83,10 +83,10 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 			return
 		}
 
-		trainCfg := cfg.Trains[idx-1]
+		flat := cfg.FlatTrains[idx-1]
 		provider := providers[idx-1]
 
-		telegram.SendMessage(fmt.Sprintf("📋 Fetching all trains for #%d [%s] %s...", idx, trainCfg.Date, trainCfg.Provider), chatID)
+		telegram.SendMessage(fmt.Sprintf("📋 Fetching all trains for #%d [%s] %s...", idx, flat.Date, flat.ProviderName), chatID)
 
 		trains, err := provider.SearchAll(ctx)
 		if err != nil {
@@ -100,7 +100,7 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		}
 
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("🚂 All Trains: %s → %s [%s]\n\n", trainCfg.Origin, trainCfg.Destination, trainCfg.Date))
+		sb.WriteString(fmt.Sprintf("🚂 All Trains: %s → %s [%s]\n\n", flat.Origin, flat.Destination, flat.Date))
 
 		for i, t := range trains {
 			status := "⛔"
@@ -134,7 +134,7 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		// If index specified, show single train details
 		if args != "" {
 			if idx, err := strconv.Atoi(args); err == nil && idx >= 1 && idx <= len(providers) {
-				trainCfg := cfg.Trains[idx-1]
+				flat := cfg.FlatTrains[idx-1]
 				status := providers[idx-1].GetStatus()
 				lastCheck := "Never"
 				if !status.LastCheckTime.IsZero() {
@@ -146,20 +146,20 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 					pausedStr = " ⏸️ PAUSED"
 				}
 
-				msg := fmt.Sprintf("🚂 Train #%d: %s%s\n\n", idx, trainCfg.Name, pausedStr)
-				msg += fmt.Sprintf("📍 Route: %s → %s\n", trainCfg.Origin, trainCfg.Destination)
-				msg += fmt.Sprintf("📅 Date: %s\n", trainCfg.Date)
-				msg += fmt.Sprintf("🔌 Provider: %s\n", trainCfg.Provider)
-				msg += fmt.Sprintf("⏱️ Interval: %s\n", trainCfg.IntervalDuration)
+				msg := fmt.Sprintf("🚂 Train #%d: %s%s\n\n", idx, flat.Name, pausedStr)
+				msg += fmt.Sprintf("📍 Route: %s → %s\n", flat.Origin, flat.Destination)
+				msg += fmt.Sprintf("📅 Date: %s\n", flat.Date)
+				msg += fmt.Sprintf("🔌 Provider: %s\n", flat.ProviderName)
+				msg += fmt.Sprintf("⏱️ Interval: %s\n", flat.IntervalDuration)
 				msg += fmt.Sprintf("🌐 Proxy: %s\n", func() string {
-					if trainCfg.ProxyURL != "" {
+					if flat.ProxyURL != "" {
 						return "Yes"
 					} else {
 						return "No"
 					}
 				}())
-				if trainCfg.Notes != "" {
-					msg += fmt.Sprintf("📝 Notes: %s\n", trainCfg.Notes)
+				if flat.Notes != "" {
+					msg += fmt.Sprintf("📝 Notes: %s\n", flat.Notes)
 				}
 				msg += fmt.Sprintf("\n📊 Last check: %s", lastCheck)
 
@@ -184,8 +184,8 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		for _, provKey := range providerOrder {
 			// Collect trains for this provider
 			var entries []string
-			for i, trainCfg := range cfg.Trains {
-				if strings.ToLower(trainCfg.Provider) != provKey {
+			for i, flat := range cfg.FlatTrains {
+				if flat.ProviderName != provKey {
 					continue
 				}
 
@@ -201,10 +201,10 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 				}
 
 				entry := fmt.Sprintf("%2d. %s%s [%s]\n    📍 %s → %s | ⏱️ %s",
-					i+1, pausedIcon, trainCfg.Name, trainCfg.Date,
-					trainCfg.Origin, trainCfg.Destination, lastCheck)
-				if trainCfg.Notes != "" {
-					entry += fmt.Sprintf("\n    📝 %s", trainCfg.Notes)
+					i+1, pausedIcon, flat.Name, flat.Date,
+					flat.Origin, flat.Destination, lastCheck)
+				if flat.Notes != "" {
+					entry += fmt.Sprintf("\n    📝 %s", flat.Notes)
 				}
 				entries = append(entries, entry)
 			}
@@ -233,7 +233,7 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		// If index specified, show single train status
 		if args != "" {
 			if idx, err := strconv.Atoi(args); err == nil && idx >= 1 && idx <= len(providers) {
-				showTrainStatus(chatID, providers[idx-1], cfg.Trains[idx-1], idx)
+				showTrainStatus(chatID, providers[idx-1], cfg.FlatTrains[idx-1], idx)
 				return
 			}
 		}
@@ -248,7 +248,7 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 
 		for i, provider := range providers {
 			status := provider.GetStatus()
-			trainCfg := cfg.Trains[i]
+			flat := cfg.FlatTrains[i]
 
 			totalChecks += status.TotalChecks
 			totalSuccess += status.SuccessfulChecks
@@ -262,7 +262,7 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 				icon = "❌"
 			}
 
-			sb.WriteString(fmt.Sprintf("%d. %s %s (%s)\n", i+1, icon, trainCfg.Name, trainCfg.Provider))
+			sb.WriteString(fmt.Sprintf("%d. %s %s (%s)\n", i+1, icon, flat.Name, flat.ProviderName))
 		}
 
 		sb.WriteString(fmt.Sprintf("\n📊 Total: %d checks | ✅ %d | ❌ %d\n", totalChecks, totalSuccess, totalFailed))
@@ -291,15 +291,15 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		}
 
 		results := providers[trainIdx].GetHistory(count)
-		trainCfg := cfg.Trains[trainIdx]
+		flat := cfg.FlatTrains[trainIdx]
 
 		if len(results) == 0 {
-			telegram.SendMessage(fmt.Sprintf("📭 No history for %s yet.", trainCfg.Name), chatID)
+			telegram.SendMessage(fmt.Sprintf("📭 No history for %s yet.", flat.Name), chatID)
 			return
 		}
 
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("📜 History: %s (last %d)\n\n", trainCfg.Name, len(results)))
+		sb.WriteString(fmt.Sprintf("📜 History: %s (last %d)\n\n", flat.Name, len(results)))
 
 		for i, r := range results {
 			timestamp := r.Timestamp.Format("02 Jan 15:04")
@@ -331,14 +331,14 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		}
 
 		provider := providers[idx-1]
-		trainCfg := cfg.Trains[idx-1]
+		flat := cfg.FlatTrains[idx-1]
 		newState := !provider.IsPaused()
 		provider.SetPaused(newState)
 
 		if newState {
-			telegram.SendMessage(fmt.Sprintf("⏸️ Train #%d (%s) paused", idx, trainCfg.Name), chatID)
+			telegram.SendMessage(fmt.Sprintf("⏸️ Train #%d (%s) paused", idx, flat.Name), chatID)
 		} else {
-			telegram.SendMessage(fmt.Sprintf("▶️ Train #%d (%s) resumed", idx, trainCfg.Name), chatID)
+			telegram.SendMessage(fmt.Sprintf("▶️ Train #%d (%s) resumed", idx, flat.Name), chatID)
 		}
 	})
 
@@ -365,14 +365,14 @@ Examples:
 }
 
 // checkTrainResult checks availability and returns formatted result string
-func checkTrainResult(ctx context.Context, provider common.Provider, trainCfg config.TrainConfig) string {
+func checkTrainResult(ctx context.Context, provider common.Provider, flat config.FlatTrainConfig) string {
 	trains, err := provider.Search(ctx)
 	if err != nil {
-		return fmt.Sprintf("❌ %s [%s] %s\n   Error: %v", trainCfg.Name, trainCfg.Date, trainCfg.Provider, err)
+		return fmt.Sprintf("❌ %s [%s] %s\n   Error: %v", flat.Name, flat.Date, flat.ProviderName, err)
 	}
 
 	if len(trains) == 0 {
-		return fmt.Sprintf("❌ %s [%s] %s\n   No trains found", trainCfg.Name, trainCfg.Date, trainCfg.Provider)
+		return fmt.Sprintf("❌ %s [%s] %s\n   No trains found", flat.Name, flat.Date, flat.ProviderName)
 	}
 
 	// Filter for available trains
@@ -385,7 +385,7 @@ func checkTrainResult(ctx context.Context, provider common.Provider, trainCfg co
 
 	if len(available) > 0 {
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("✅ %s [%s] %s: %d tersedia!\n", trainCfg.Name, trainCfg.Date, trainCfg.Provider, len(available)))
+		sb.WriteString(fmt.Sprintf("✅ %s [%s] %s: %d tersedia!\n", flat.Name, flat.Date, flat.ProviderName, len(available)))
 		for _, t := range available {
 			sb.WriteString(fmt.Sprintf("   🚂 %s\n   ⏰ %s → %s\n   💺 %s seats @ Rp%s\n",
 				t.Name, t.DepartureTime, t.ArrivalTime, t.SeatsLeft, t.Price))
@@ -393,11 +393,11 @@ func checkTrainResult(ctx context.Context, provider common.Provider, trainCfg co
 		return sb.String()
 	}
 
-	return fmt.Sprintf("⛔ %s [%s] %s: Habis (%d kereta full)", trainCfg.Name, trainCfg.Date, trainCfg.Provider, len(trains))
+	return fmt.Sprintf("⛔ %s [%s] %s: Habis (%d kereta full)", flat.Name, flat.Date, flat.ProviderName, len(trains))
 }
 
 // showTrainStatus shows detailed status for a single train
-func showTrainStatus(chatID string, provider common.Provider, trainCfg config.TrainConfig, index int) {
+func showTrainStatus(chatID string, provider common.Provider, flat config.FlatTrainConfig, index int) {
 	status := provider.GetStatus()
 
 	uptime := formatDuration(time.Since(status.StartTime))
@@ -426,11 +426,11 @@ func showTrainStatus(chatID string, provider common.Provider, trainCfg config.Tr
 • Uptime: %s
 • Checks: %d (✅ %d | ❌ %d)
 • Last: %s - %s`,
-		index, trainCfg.Name,
-		trainCfg.Origin, trainCfg.Destination,
-		trainCfg.Date,
-		trainCfg.Provider,
-		trainCfg.IntervalDuration.String(),
+		index, flat.Name,
+		flat.Origin, flat.Destination,
+		flat.Date,
+		flat.ProviderName,
+		flat.IntervalDuration.String(),
 		uptime,
 		status.TotalChecks, status.SuccessfulChecks, status.FailedChecks,
 		lastCheck, lastResult,

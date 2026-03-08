@@ -63,41 +63,32 @@ webhook:
   port: 8080
 
 trains:
-  # Monitor BENGAWAN via TiketKai
+  # Satu entry per kereta, bisa punya banyak provider
   - name: BENGAWAN
     origin: LPN
     destination: CKR
-    date: "2026-02-16"
-    provider: tiketkai
-    interval: 180
+    date: "2026-04-02"
+    interval: 300
+    notes: "Pulang kampung"
+    providers:
+      - traveloka
+      - tiketkai
 
-  # Monitor ARGO via Traveloka
+  # Kereta dengan provider yang butuh proxy
   - name: ARGO DWIPANGGA
     origin: GMR
     destination: YK
     date: "2026-02-17"
-    provider: traveloka
     interval: 300
-
-  # Monitor via Tiket.com dengan proxy
-  - name: GAJAYANA
-    origin: BD
-    destination: SGU
-    date: "2026-02-18"
-    provider: tiketcom
-    proxy_url: "socks5h://127.0.0.1:40000"
-    interval: 120
-
-  # Monitor via BookingKAI (official KAI website)
-  - name: BENGAWAN
-    origin: CKR
-    destination: LPN
-    date: "2026-04-02"
-    provider: bookingkai
-    proxy_url: "socks5://127.0.0.1:40000"
-    interval: 600
-    notes: "Mudik lebaran"
+    providers:
+      - traveloka
+      - name: tiketcom
+        proxy_url: "socks5h://127.0.0.1:40000"
+      - name: bookingkai
+        proxy_url: "socks5://127.0.0.1:40000"
 ```
+
+> **Note:** Format lama (single `provider` + `proxy_url`) masih didukung untuk backward compatibility.
 
 ### Train Config Fields
 
@@ -107,9 +98,8 @@ trains:
 | `origin` | Yes | Kode stasiun asal |
 | `destination` | Yes | Kode stasiun tujuan |
 | `date` | Yes | Tanggal (YYYY-MM-DD) |
-| `provider` | Yes | `tiketkai`, `traveloka`, `tiketcom`, atau `bookingkai` |
+| `providers` | Yes | Array provider (string atau object dengan `proxy_url`) |
 | `interval` | No | Interval check dalam detik (default: 300) |
-| `proxy_url` | No | SOCKS5 proxy untuk tiketcom/bookingkai |
 | `notes` | No | Catatan opsional, muncul di /list dan notifikasi |
 
 ## Usage

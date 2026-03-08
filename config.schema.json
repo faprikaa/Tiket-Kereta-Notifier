@@ -38,7 +38,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["name", "origin", "destination", "date", "provider"],
+        "required": ["name", "origin", "destination", "date"],
         "properties": {
           "name": {
             "type": "string",
@@ -57,24 +57,53 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "description": "Tanggal keberangkatan (format: YYYY-MM-DD)"
           },
-          "provider": {
-            "type": "string",
-            "enum": ["tiketkai", "traveloka", "tiketcom", "bookingkai"],
-            "description": "Provider untuk pencarian tiket"
-          },
           "interval": {
             "type": "integer",
             "default": 300,
             "minimum": 60,
             "description": "Interval check dalam detik (minimum 60)"
           },
-          "proxy_url": {
-            "type": "string",
-            "description": "SOCKS5 proxy URL (contoh: socks5h://127.0.0.1:40000)"
-          },
           "notes": {
             "type": "string",
             "description": "Catatan opsional, ditampilkan di /list dan notifikasi"
+          },
+          "providers": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Daftar provider (string atau object dengan proxy_url)",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": ["tiketkai", "traveloka", "tiketcom", "bookingkai"],
+                  "description": "Provider name (tanpa proxy)"
+                },
+                {
+                  "type": "object",
+                  "required": ["name"],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "enum": ["tiketkai", "traveloka", "tiketcom", "bookingkai"],
+                      "description": "Provider name"
+                    },
+                    "proxy_url": {
+                      "type": "string",
+                      "description": "SOCKS5 proxy URL (contoh: socks5h://127.0.0.1:40000)"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "provider": {
+            "type": "string",
+            "enum": ["tiketkai", "traveloka", "tiketcom", "bookingkai"],
+            "description": "[DEPRECATED] Gunakan 'providers' array. Single provider untuk backward compat."
+          },
+          "proxy_url": {
+            "type": "string",
+            "description": "[DEPRECATED] Gunakan providers array. SOCKS5 proxy URL."
           }
         }
       }

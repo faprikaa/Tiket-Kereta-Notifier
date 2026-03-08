@@ -44,7 +44,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	// Initialize and start all train monitors
+	// Initialize and start all train monitors (from flattened config)
 	providers, err := initAllProviders(ctx, logger, cfg)
 	if err != nil {
 		logger.Error("Failed to initialize providers", "error", err)
@@ -67,7 +67,7 @@ func main() {
 
 	for i, p := range providers {
 		wg.Add(1)
-		providerType := strings.ToLower(cfg.Trains[i].Provider)
+		providerType := cfg.FlatTrains[i].ProviderName
 		delay := time.Duration(providerCount[providerType]) * staggerDelay
 		providerCount[providerType]++
 
@@ -104,82 +104,77 @@ func main() {
 	wg.Wait()
 }
 
-// initAllProviders creates providers for each train config
+// initAllProviders creates providers for each flat train config
 func initAllProviders(ctx context.Context, logger *slog.Logger, cfg *config.Config) ([]common.Provider, error) {
 	var providers []common.Provider
 
-	for i, trainCfg := range cfg.Trains {
-		// Validate train config
-		if err := trainCfg.Validate(); err != nil {
-			return nil, fmt.Errorf("train #%d: %w", i+1, err)
-		}
-
-		provider, err := initProviderForTrain(ctx, logger, &trainCfg, i+1)
+	for i, flat := range cfg.FlatTrains {
+		provider, err := initProviderForTrain(ctx, logger, &flat, i+1)
 		if err != nil {
-			return nil, fmt.Errorf("train %s: %w", trainCfg.Name, err)
+			return nil, fmt.Errorf("train %s (%s): %w", flat.Name, flat.ProviderName, err)
 		}
 
 		providers = append(providers, provider)
 		logger.Info("Initialized train monitor",
-			"train", trainCfg.Name,
-			"provider", trainCfg.Provider,
-			"route", fmt.Sprintf("%s → %s", trainCfg.Origin, trainCfg.Destination),
-			"date", trainCfg.Date,
-			"interval", trainCfg.IntervalDuration,
+			"train", flat.Name,
+			"provider", flat.ProviderName,
+			"route", fmt.Sprintf("%s → %s", flat.Origin, flat.Destination),
+			"date", flat.Date,
+			"interval", flat.IntervalDuration,
 		)
 	}
 
 	return providers, nil
 }
 
-// initProviderForTrain creates a provider for a single train config
-func initProviderForTrain(ctx context.Context, logger *slog.Logger, trainCfg *config.TrainConfig, index int) (common.Provider, error) {
-	switch strings.ToLower(trainCfg.Provider) {
+// initProviderForTrain creates a provider for a single flat train config
+func initProviderForTrain(ctx context.Context, logger *slog.Logger, flat *config.FlatTrainConfig, index int) (common.Provider, error) {
+	switch flat.ProviderName {
 	case "tiketkai":
 		if err := tiketkai.Init(ctx); err != nil {
 			return nil, fmt.Errorf("TiketKai init failed: %w", err)
 		}
 		return tiketkai.NewProvider(
 			logger,
-			trainCfg.Origin,
-			trainCfg.Destination,
-			trainCfg.Date,
-			trainCfg.Name,
-			trainCfg.IntervalDuration,
-			trainCfg.ProxyURL,
+			flat.Origin,
+			flat.Destination,
+			flat.Date,
+			flat.Name,
+			flat.IntervalDuration,
+			flat.ProxyURL,
 			index,
-			trainCfg.Notes,
+			flat.Notes,
 		), nil
 
 	case "traveloka":
-		day, month, year := trainCfg.DateParts()
+		day, month, year := flat.DateParts()
 		return traveloka.NewProvider(
 			logger,
-			trainCfg.Origin,
-			trainCfg.Destination,
+			flat.Origin,
+			flat.Destination,
 			day, month, year,
-			trainCfg.Name,
-			trainCfg.IntervalDuration,
-			trainCfg.ProxyURL,
+			flat.Name,
+			flat.IntervalDuration,
+			flat.ProxyURL,
 			index,
-			trainCfg.Notes,
+			flat.Notes,
 		), nil
 
 	case "tiketcom":
 		provider := tiketcom.NewProvider(
 			logger,
-			trainCfg.Origin,
-			trainCfg.Destination,
-			trainCfg.DateYYYYMMDD(),
-			trainCfg.Name,
-			trainCfg.IntervalDuration,
-			trainCfg.ProxyURL,
+			flat.Origin,
+			flat.Destination,
+			flat.DateYYYYMMDD(),
+			flat.Name,
+			flat.IntervalDuration,
+			flat.ProxyURL,
 			index,
-			trainCfg.Notes,
+			flat.Notes,
 		)
 
 		// Test connection
-		logger.Info("Testing Tiket.com connection...", "train", trainCfg.Name)
+		logger.Info("Testing Tiket.com connection...", "train", flat.Name)
 		if err := testTiketcomConnection(ctx, provider, logger); err != nil {
 			return nil, err
 		}
@@ -188,18 +183,18 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, trainCfg *co
 	case "bookingkai":
 		return bookingkai.NewProvider(
 			logger,
-			trainCfg.Origin,
-			trainCfg.Destination,
-			trainCfg.Date,
-			trainCfg.Name,
-			trainCfg.IntervalDuration,
-			trainCfg.ProxyURL,
+			flat.Origin,
+			flat.Destination,
+			flat.Date,
+			flat.Name,
+			flat.IntervalDuration,
+			flat.ProxyURL,
 			index,
-			trainCfg.Notes,
+			flat.Notes,
 		), nil
 
 	default:
-		return nil, fmt.Errorf("unknown provider '%s' (use: tiketkai, traveloka, tiketcom, bookingkai)", trainCfg.Provider)
+		return nil, fmt.Errorf("unknown provider '%s' (use: tiketkai, traveloka, tiketcom, bookingkai)", flat.ProviderName)
 	}
 }
 
@@ -239,16 +234,16 @@ func validateTrainsExist(ctx context.Context, logger *slog.Logger, providers []c
 	// Collect provider indices per group
 	groups := make(map[trainKey][]int)
 	var groupOrder []trainKey // preserve order
-	for i, trainCfg := range cfg.Trains {
-		if trainCfg.Name == "" {
-			logger.Info("No train name filter, skipping validation", "route", fmt.Sprintf("%s → %s", trainCfg.Origin, trainCfg.Destination))
+	for i, flat := range cfg.FlatTrains {
+		if flat.Name == "" {
+			logger.Info("No train name filter, skipping validation", "route", fmt.Sprintf("%s → %s", flat.Origin, flat.Destination))
 			continue
 		}
 		key := trainKey{
-			Name:        strings.ToLower(trainCfg.Name),
-			Origin:      trainCfg.Origin,
-			Destination: trainCfg.Destination,
-			Date:        trainCfg.Date,
+			Name:        strings.ToLower(flat.Name),
+			Origin:      flat.Origin,
+			Destination: flat.Destination,
+			Date:        flat.Date,
 		}
 		if _, exists := groups[key]; !exists {
 			groupOrder = append(groupOrder, key)
@@ -259,30 +254,30 @@ func validateTrainsExist(ctx context.Context, logger *slog.Logger, providers []c
 	// Validate each group once
 	for _, key := range groupOrder {
 		indices := groups[key]
-		trainCfg := cfg.Trains[indices[0]] // representative config
+		flat := cfg.FlatTrains[indices[0]] // representative config
 
 		validated := false
 		var lastErr error
 
 		for _, idx := range indices {
 			provider := providers[idx]
-			providerName := cfg.Trains[idx].Provider
+			providerName := cfg.FlatTrains[idx].ProviderName
 
-			logger.Info("Validating train...", "train", trainCfg.Name, "provider", providerName)
+			logger.Info("Validating train...", "train", flat.Name, "provider", providerName)
 
 			trains, err := provider.Search(ctx)
 			if err != nil {
 				logger.Warn("Validation failed, trying next provider",
-					"train", trainCfg.Name, "provider", providerName, "error", err)
+					"train", flat.Name, "provider", providerName, "error", err)
 				lastErr = err
 				continue
 			}
 
 			// Check if any result matches the configured train name
-			target := strings.ToLower(trainCfg.Name)
+			target := strings.ToLower(flat.Name)
 			for _, t := range trains {
 				if strings.Contains(strings.ToLower(t.Name), target) {
-					logger.Info("✓ Train found", "train", trainCfg.Name, "matched", t.Name,
+					logger.Info("✓ Train found", "train", flat.Name, "matched", t.Name,
 						"availability", t.Availability, "via", providerName)
 					validated = true
 					break
@@ -299,11 +294,11 @@ func validateTrainsExist(ctx context.Context, logger *slog.Logger, providers []c
 				availableNames = append(availableNames, t.Name)
 			}
 			lastErr = fmt.Errorf("train '%s' not found on route %s → %s (date: %s). Available: %v",
-				trainCfg.Name, trainCfg.Origin, trainCfg.Destination, trainCfg.Date, availableNames)
+				flat.Name, flat.Origin, flat.Destination, flat.Date, availableNames)
 		}
 
 		if !validated {
-			return fmt.Errorf("failed to validate train %s: %w", trainCfg.Name, lastErr)
+			return fmt.Errorf("failed to validate train %s: %w", flat.Name, lastErr)
 		}
 	}
 	return nil
@@ -322,7 +317,7 @@ func runBot(ctx context.Context, logger *slog.Logger, cfg *config.Config, tgBot 
 				return
 			}
 			tgBot.SetWebhook(publicURL + "/webhook")
-			telegram.SendMessage(fmt.Sprintf("🚀 Bot started!\nMonitoring %d trains\nWebhook: %s", len(cfg.Trains), publicURL), cfg.Telegram.ChatID)
+			telegram.SendMessage(fmt.Sprintf("🚀 Bot started!\nMonitoring %d trains\nWebhook: %s", len(cfg.FlatTrains), publicURL), cfg.Telegram.ChatID)
 		}()
 
 		if err := tgBot.StartWebhook(cfg.Webhook.Port, []string{cfg.Telegram.ChatID}); err != nil {
@@ -330,7 +325,7 @@ func runBot(ctx context.Context, logger *slog.Logger, cfg *config.Config, tgBot 
 		}
 		<-ctx.Done()
 	} else {
-		telegram.SendMessage(fmt.Sprintf("🚀 Bot started!\nMonitoring %d trains", len(cfg.Trains)), cfg.Telegram.ChatID)
+		telegram.SendMessage(fmt.Sprintf("🚀 Bot started!\nMonitoring %d trains", len(cfg.FlatTrains)), cfg.Telegram.ChatID)
 		logger.Info("Bot running in long-polling/manual mode. Press Ctrl+C to exit.")
 		<-ctx.Done()
 	}
