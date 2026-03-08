@@ -39,7 +39,7 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 			trains, err := provider.Search(ctx)
 
 			if err != nil {
-				sb.WriteString(fmt.Sprintf("❌ #%d %s [%s] %s: Error\n", i+1, flat.Name, flat.Date, flat.ProviderName))
+				sb.WriteString(fmt.Sprintf("❌ #%d %s [%s] via %s: Error\n", i+1, flat.Name, flat.Date, flat.ProviderName))
 				continue
 			}
 
@@ -53,13 +53,13 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 
 			if len(available) > 0 {
 				availableCount++
-				sb.WriteString(fmt.Sprintf("✅ #%d %s [%s] %s: %d tersedia!\n",
+				sb.WriteString(fmt.Sprintf("✅ #%d %s [%s] via %s: %d tersedia!\n",
 					i+1, flat.Name, flat.Date, flat.ProviderName, len(available)))
 				for _, t := range available {
 					sb.WriteString(fmt.Sprintf("   💺 %s seats @ Rp%s\n", t.SeatsLeft, t.Price))
 				}
 			} else {
-				sb.WriteString(fmt.Sprintf("⛔ #%d %s [%s] %s: Habis\n",
+				sb.WriteString(fmt.Sprintf("⛔ #%d %s [%s] via %s: Habis\n",
 					i+1, flat.Name, flat.Date, flat.ProviderName))
 			}
 		}
@@ -168,56 +168,55 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 			}
 		}
 
-		// List all trains, grouped by provider
+		// List all trains, grouped by train identity
 		var sb strings.Builder
 		sb.WriteString("🚂 Configured Trains:\n")
 
-		// Provider display order and emoji mapping
-		providerOrder := []string{"traveloka", "tiketkai", "tiketcom", "bookingkai"}
 		providerEmoji := map[string]string{
-			"traveloka":  "✈️ TRAVELOKA",
-			"tiketkai":   "🚂 TIKETKAI",
-			"tiketcom":   "🎫 TIKETCOM",
-			"bookingkai": "🏛️ BOOKINGKAI",
+			"traveloka":  "✈️",
+			"tiketkai":   "🚂",
+			"tiketcom":   "🎫",
+			"bookingkai": "🏛️",
 		}
 
-		for _, provKey := range providerOrder {
-			// Collect trains for this provider
-			var entries []string
-			for i, flat := range cfg.FlatTrains {
-				if flat.ProviderName != provKey {
-					continue
-				}
+		flatIdx := 0
+		for _, trainCfg := range cfg.Trains {
+			sb.WriteString(fmt.Sprintf("\n━━ %s [%s] ━━\n", trainCfg.Name, trainCfg.Date))
+			sb.WriteString(fmt.Sprintf("📍 %s → %s | ⏱️ %v\n", trainCfg.Origin, trainCfg.Destination, trainCfg.IntervalDuration))
+			if trainCfg.Notes != "" {
+				sb.WriteString(fmt.Sprintf("📝 %s\n", trainCfg.Notes))
+			}
 
-				status := providers[i].GetStatus()
+			for i := 0; i < len(trainCfg.Providers); i++ {
+				if flatIdx >= len(cfg.FlatTrains) {
+					break
+				}
+				provider := providers[flatIdx]
+				flat := cfg.FlatTrains[flatIdx]
+
+				status := provider.GetStatus()
 				lastCheck := "Never"
 				if !status.LastCheckTime.IsZero() {
 					lastCheck = formatDuration(time.Since(status.LastCheckTime)) + " ago"
 				}
 
 				pausedIcon := ""
-				if providers[i].IsPaused() {
+				if provider.IsPaused() {
 					pausedIcon = "🔇 "
 				}
 
-				entry := fmt.Sprintf("%2d. %s%s [%s]\n    📍 %s → %s | ⏱️ %s",
-					i+1, pausedIcon, flat.Name, flat.Date,
-					flat.Origin, flat.Destination, lastCheck)
-				if flat.Notes != "" {
-					entry += fmt.Sprintf("\n    📝 %s", flat.Notes)
+				emoji := providerEmoji[flat.ProviderName]
+				if emoji == "" {
+					emoji = "🔌"
 				}
-				entries = append(entries, entry)
-			}
 
-			if len(entries) > 0 {
-				label := providerEmoji[provKey]
-				if label == "" {
-					label = provKey
+				providerDisplay := strings.ToUpper(flat.ProviderName)
+				if flat.ProxyURL != "" {
+					providerDisplay += " (proxy)"
 				}
-				sb.WriteString(fmt.Sprintf("\n━━ %s ━━\n", label))
-				for _, e := range entries {
-					sb.WriteString(e + "\n")
-				}
+
+				sb.WriteString(fmt.Sprintf("%2d. %s%s %s | %s\n", flatIdx+1, pausedIcon, emoji, providerDisplay, lastCheck))
+				flatIdx++
 			}
 		}
 
@@ -262,7 +261,7 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 				icon = "❌"
 			}
 
-			sb.WriteString(fmt.Sprintf("%d. %s %s (%s)\n", i+1, icon, flat.Name, flat.ProviderName))
+			sb.WriteString(fmt.Sprintf("%d. %s %s [%s] via %s\n", i+1, icon, flat.Name, flat.Date, flat.ProviderName))
 		}
 
 		sb.WriteString(fmt.Sprintf("\n📊 Total: %d checks | ✅ %d | ❌ %d\n", totalChecks, totalSuccess, totalFailed))
@@ -368,11 +367,11 @@ Examples:
 func checkTrainResult(ctx context.Context, provider common.Provider, flat config.FlatTrainConfig) string {
 	trains, err := provider.Search(ctx)
 	if err != nil {
-		return fmt.Sprintf("❌ %s [%s] %s\n   Error: %v", flat.Name, flat.Date, flat.ProviderName, err)
+		return fmt.Sprintf("❌ %s [%s] via %s\n   Error: %v", flat.Name, flat.Date, flat.ProviderName, err)
 	}
 
 	if len(trains) == 0 {
-		return fmt.Sprintf("❌ %s [%s] %s\n   No trains found", flat.Name, flat.Date, flat.ProviderName)
+		return fmt.Sprintf("❌ %s [%s] via %s\n   No trains found", flat.Name, flat.Date, flat.ProviderName)
 	}
 
 	// Filter for available trains
@@ -385,7 +384,7 @@ func checkTrainResult(ctx context.Context, provider common.Provider, flat config
 
 	if len(available) > 0 {
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("✅ %s [%s] %s: %d tersedia!\n", flat.Name, flat.Date, flat.ProviderName, len(available)))
+		sb.WriteString(fmt.Sprintf("✅ %s [%s] via %s: %d tersedia!\n", flat.Name, flat.Date, flat.ProviderName, len(available)))
 		for _, t := range available {
 			sb.WriteString(fmt.Sprintf("   🚂 %s\n   ⏰ %s → %s\n   💺 %s seats @ Rp%s\n",
 				t.Name, t.DepartureTime, t.ArrivalTime, t.SeatsLeft, t.Price))
@@ -393,7 +392,7 @@ func checkTrainResult(ctx context.Context, provider common.Provider, flat config
 		return sb.String()
 	}
 
-	return fmt.Sprintf("⛔ %s [%s] %s: Habis (%d kereta full)", flat.Name, flat.Date, flat.ProviderName, len(trains))
+	return fmt.Sprintf("⛔ %s [%s] via %s: Habis (%d kereta full)", flat.Name, flat.Date, flat.ProviderName, len(trains))
 }
 
 // showTrainStatus shows detailed status for a single train

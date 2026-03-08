@@ -330,8 +330,8 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			})
 
 			if len(availableTrains) > 0 {
-				msg := fmt.Sprintf("🎫 #%d TIKETCOM [%s] %s→%s\n✅ %s tersedia! (%d found)\n",
-					p.Index, p.Date, p.Origin, p.Destination, p.TrainName, len(availableTrains))
+				msg := fmt.Sprintf("🚂 #%d %s\n📍 %s→%s [%s]\n✅ Tersedia! (%d found) via tiketcom\n",
+					p.Index, p.TrainName, p.Origin, p.Destination, p.Date, len(availableTrains))
 				if p.Notes != "" {
 					msg += fmt.Sprintf("📝 %s\n", p.Notes)
 				}
