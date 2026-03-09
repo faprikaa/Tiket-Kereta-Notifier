@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/proxy"
 
 	utls "github.com/refraction-networking/utls"
 
@@ -80,90 +82,72 @@ func formatDateIndo(date string) (string, error) {
 	return fmt.Sprintf("%02d-%s-%d", t.Day(), month, t.Year()), nil
 }
 
-// newUTLSDialer returns a DialTLS function that impersonates Chrome's TLS fingerprint.
-func newUTLSDialer(proxyURL string) func(network, addr string) (net.Conn, error) {
-	return func(network, addr string) (net.Conn, error) {
-		var conn net.Conn
-		var err error
+// dialUTLS dials addr via TCP (optionally through a SOCKS5 proxy), performs a
+// uTLS handshake impersonating Chrome, and returns the connection.
+// The proxyURL parameter is the SOCKS5 proxy URL string (e.g. "socks5h://127.0.0.1:40000").
+func dialUTLS(ctx context.Context, network, addr, proxyURL string) (net.Conn, error) {
+	var rawConn net.Conn
+	var err error
 
-		if proxyURL != "" {
-			// Connect through SOCKS5 proxy
-			u, parseErr := url.Parse(proxyURL)
-			if parseErr != nil {
-				return nil, fmt.Errorf("invalid proxy URL: %w", parseErr)
-			}
-			dialer, dialErr := proxyDialer(u)
-			if dialErr != nil {
-				return nil, dialErr
-			}
-			conn, err = dialer.Dial(network, addr)
-		} else {
-			conn, err = net.DialTimeout(network, addr, 30*time.Second)
+	if proxyURL != "" {
+		u, parseErr := url.Parse(proxyURL)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid proxy URL: %w", parseErr)
 		}
-		if err != nil {
-			return nil, err
+		dialer, dialErr := proxy.FromURL(u, proxy.Direct)
+		if dialErr != nil {
+			return nil, fmt.Errorf("socks5 dialer: %w", dialErr)
 		}
-
-		host, _, splitErr := net.SplitHostPort(addr)
-		if splitErr != nil {
-			host = addr
-		}
-
-		uconn := utls.UClient(conn, &utls.Config{
-			ServerName:         host,
-			InsecureSkipVerify: false,
-			// Force HTTP/1.1 only — Chrome's fingerprint advertises h2 in ALPN,
-			// but our http.Transport doesn't support HTTP/2 over custom DialTLS.
-			// Without this, the server sends an HTTP/2 preface which breaks the transport.
-			NextProtos: []string{"http/1.1"},
-		}, utls.HelloChrome_Auto)
-
-		if err := uconn.Handshake(); err != nil {
-			conn.Close()
-			return nil, fmt.Errorf("TLS handshake failed: %w", err)
-		}
-		return uconn, nil
+		rawConn, err = dialer.Dial(network, addr)
+	} else {
+		var d net.Dialer
+		rawConn, err = d.DialContext(ctx, network, addr)
 	}
+	if err != nil {
+		return nil, err
+	}
+
+	host, _, splitErr := net.SplitHostPort(addr)
+	if splitErr != nil {
+		host = addr
+	}
+
+	uconn := utls.UClient(rawConn, &utls.Config{
+		ServerName: host,
+	}, utls.HelloChrome_Auto)
+
+	if err := uconn.HandshakeContext(ctx); err != nil {
+		rawConn.Close()
+		return nil, fmt.Errorf("uTLS handshake failed: %w", err)
+	}
+	return uconn, nil
 }
 
-// proxyDialer creates a SOCKS5 dialer for the given proxy URL.
-// Uses simple TCP connection for non-socks proxies; for socks5 uses golang.org/x/net/proxy.
-func proxyDialer(u *url.URL) (interface{ Dial(string, string) (net.Conn, error) }, error) {
-	// Only SOCKS5 is supported (same as other providers)
-	switch u.Scheme {
-	case "socks5", "socks5h":
-		// Simple socks5 via golang.org/x/net/proxy is not imported here to avoid dependency bloat.
-		// Fall back to direct + let the caller handle proxy separately if needed.
-		// For now we just do a direct connect; proxy support for bookingkai can be added later.
-		return &net.Dialer{Timeout: 30 * time.Second}, nil
-	default:
-		return &net.Dialer{Timeout: 30 * time.Second}, nil
-	}
-}
-
-// ensureClient lazily initializes the HTTP client with uTLS transport.
+// ensureClient lazily initializes the HTTP client using http2.Transport + uTLS.
+// We use http2.Transport directly because booking.kai.id (behind Cloudflare)
+// negotiates HTTP/2 via ALPN, and http.Transport cannot handle HTTP/2 frames
+// when a custom DialTLS is used.
 func (p *Provider) ensureClient() {
 	if p.client != nil {
 		return
 	}
 
 	jar, _ := cookiejar.New(nil)
+	proxyURL := p.ProxyURL
 
-	transport := &http.Transport{
-		DialTLS:             newUTLSDialer(p.ProxyURL),
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: false},
-		ForceAttemptHTTP2:   false, // Cloudflare works fine over HTTP/1.1 for scraping
-		MaxIdleConns:        10,
-		IdleConnTimeout:     90 * time.Second,
-		DisableCompression:  false,
+	t2 := &http2.Transport{
+		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+			return dialUTLS(ctx, network, addr, proxyURL)
+		},
+		// Allow plain HTTP connections through the transport (needed for some redirect chains)
+		AllowHTTP: false,
 	}
 
 	p.client = &http.Client{
-		Transport: transport,
+		Transport: t2,
 		Jar:       jar,
 		Timeout:   60 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// Follow up to 10 redirects, propagating browser-like headers
 			if len(via) >= 10 {
 				return fmt.Errorf("too many redirects")
 			}
@@ -172,7 +156,7 @@ func (p *Provider) ensureClient() {
 		},
 	}
 
-	p.Logger.Info("BookingKAI HTTP client (uTLS Chrome) initialized", "proxy", p.ProxyURL)
+	p.Logger.Info("BookingKAI HTTP client (uTLS+HTTP2) initialized", "proxy", p.ProxyURL)
 }
 
 // setBrowserHeaders sets browser-like headers on the request, matching
