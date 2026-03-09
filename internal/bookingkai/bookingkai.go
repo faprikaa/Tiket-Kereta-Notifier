@@ -112,6 +112,10 @@ func newUTLSDialer(proxyURL string) func(network, addr string) (net.Conn, error)
 		uconn := utls.UClient(conn, &utls.Config{
 			ServerName:         host,
 			InsecureSkipVerify: false,
+			// Force HTTP/1.1 only — Chrome's fingerprint advertises h2 in ALPN,
+			// but our http.Transport doesn't support HTTP/2 over custom DialTLS.
+			// Without this, the server sends an HTTP/2 preface which breaks the transport.
+			NextProtos: []string{"http/1.1"},
 		}, utls.HelloChrome_Auto)
 
 		if err := uconn.Handshake(); err != nil {
