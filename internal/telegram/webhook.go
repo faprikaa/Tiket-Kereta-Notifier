@@ -16,13 +16,15 @@ type WebhookServer struct {
 	server *http.Server
 	bot    *Bot
 	port   int
+	appCtx context.Context // long-lived app context, not tied to HTTP requests
 }
 
 // NewWebhookServer creates a new webhook server
-func NewWebhookServer(port int, bot *Bot) *WebhookServer {
+func NewWebhookServer(port int, bot *Bot, appCtx context.Context) *WebhookServer {
 	return &WebhookServer{
-		port: port,
-		bot:  bot,
+		port:   port,
+		bot:    bot,
+		appCtx: appCtx,
 	}
 }
 
@@ -84,10 +86,12 @@ func (w *WebhookServer) handleWebhook(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Process the update
-	w.processUpdate(r.Context(), update)
-
+	// Acknowledge immediately — Telegram expects a fast response.
+	// Command handlers run in a goroutine with the long-lived app context
+	// so they are never cancelled by the HTTP server's WriteTimeout.
 	rw.WriteHeader(http.StatusOK)
+
+	go w.processUpdate(w.appCtx, update)
 }
 
 // handleHealth returns health status

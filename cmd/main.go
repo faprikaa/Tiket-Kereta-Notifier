@@ -320,7 +320,7 @@ func runBot(ctx context.Context, logger *slog.Logger, cfg *config.Config, tgBot 
 			telegram.SendMessage(fmt.Sprintf("🚀 Bot started!\nMonitoring %d trains\nWebhook: %s", len(cfg.FlatTrains), publicURL), cfg.Telegram.ChatID)
 		}()
 
-		if err := tgBot.StartWebhook(cfg.Webhook.Port, []string{cfg.Telegram.ChatID}); err != nil {
+		if err := tgBot.StartWebhook(ctx, cfg.Webhook.Port, []string{cfg.Telegram.ChatID}); err != nil {
 			logger.Error("Webhook server failed", "error", err)
 		}
 		<-ctx.Done()
