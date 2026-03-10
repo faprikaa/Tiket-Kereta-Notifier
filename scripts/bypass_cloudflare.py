@@ -1,18 +1,20 @@
 """
-Bypass Cloudflare untuk booking.kai.id tanpa browser.
-Pakai curl_cffi (curl-impersonate) untuk mimic TLS fingerprint Chrome.
+Bypass Cloudflare untuk booking.kai.id menggunakan DrissionPage.
+DrissionPage mengontrol Chromium via DevTools Protocol (CDP) — 
+tanpa WebDriver, jadi tidak terdeteksi sebagai bot.
 
 Install:
-    pip install curl_cffi beautifulsoup4
+    pip install DrissionPage
+
+Pastikan Google Chrome / Chromium terinstall di system.
 
 Usage:
     python scripts/bypass_cloudflare.py
 """
 
-from curl_cffi import requests
-from bs4 import BeautifulSoup
+from DrissionPage import ChromiumPage, ChromiumOptions
 from urllib.parse import quote
-import json
+import time
 import sys
 
 # ============================================================
@@ -21,7 +23,8 @@ import sys
 ORIGIN = "PSE"
 DESTINATION = "LPN"
 DATE = "2026-03-15"  # format YYYY-MM-DD
-PROXY = ""  # kosongkan jika tidak pakai proxy, contoh: "socks5h://127.0.0.1:40000"
+PROXY = ""  # kosongkan jika tidak pakai, contoh: "socks5://127.0.0.1:40000"
+HEADLESS = True  # True = tanpa window, False = tampilkan browser
 
 # ============================================================
 
@@ -40,8 +43,8 @@ def format_date_indo(date_str: str) -> str:
 
 def search_trains(origin: str, dest: str, date: str, proxy: str = "") -> list[dict]:
     """
-    Scrape booking.kai.id search results.
-    Returns list of train dicts.
+    Scrape booking.kai.id search results using DrissionPage.
+    Handles Cloudflare challenge automatically.
     """
     date_indo = format_date_indo(date)
 
@@ -54,130 +57,133 @@ def search_trains(origin: str, dest: str, date: str, proxy: str = "") -> list[di
         f"&submit=Cari+%26+Pesan+Tiket"
     )
 
-    headers = {
-        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-        "accept-language": "en-US,en;q=0.8",
-        "cache-control": "no-cache",
-        "pragma": "no-cache",
-        "sec-ch-ua": '"Not:A-Brand";v="99", "Brave";v="133", "Chromium";v="133"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"Windows"',
-        "sec-fetch-dest": "document",
-        "sec-fetch-mode": "navigate",
-        "sec-fetch-site": "same-origin",
-        "sec-fetch-user": "?1",
-        "upgrade-insecure-requests": "1",
-        "referer": "https://booking.kai.id/",
-    }
-
-    kwargs = {
-        "headers": headers,
-        "impersonate": "chrome110",
-        "timeout": 60,
-        "allow_redirects": True,
-    }
-
-    if proxy:
-        kwargs["proxies"] = {"https": proxy, "http": proxy}
-
     print(f"🔍 Searching: {origin} → {dest} [{date}]")
     print(f"   URL: {url}")
+
+    # Setup browser options
+    options = ChromiumOptions()
+    if HEADLESS:
+        options.headless()
     if proxy:
+        options.set_proxy(proxy)
         print(f"   Proxy: {proxy}")
 
-    resp = requests.get(url, **kwargs)
+    # Disable unnecessary features for speed
+    options.set_argument("--disable-images")
+    options.set_argument("--no-sandbox")
+    options.set_argument("--disable-dev-shm-usage")
+    options.set_argument("--disable-gpu")
 
-    # Check for Cloudflare blocks
-    html = resp.text
-    if resp.status_code == 403 or "Just a moment" in html or "cf-browser-verification" in html:
-        print(f"❌ Blocked by Cloudflare challenge (status {resp.status_code})")
-        # Save response for debugging
-        with open("cf_blocked.html", "w", encoding="utf-8") as f:
+    page = ChromiumPage(options)
+
+    try:
+        print("   Navigating to booking.kai.id...")
+        page.get(url)
+
+        # Wait for Cloudflare challenge to resolve (if any)
+        # DrissionPage handles this automatically since it's a real browser
+        max_wait = 30
+        waited = 0
+        while waited < max_wait:
+            title = page.title or ""
+            html = page.html or ""
+
+            # Check if still on Cloudflare challenge
+            if "Just a moment" in title or "cf_chl_opt" in html or "challenge-platform" in html:
+                print(f"   ⏳ Waiting for Cloudflare challenge... ({waited}s)")
+                time.sleep(2)
+                waited += 2
+                continue
+
+            # Check if page loaded
+            if "booking.kai.id" in title.lower() or "data-block" in html or "list-kereta" in html:
+                print(f"   ✅ Cloudflare bypassed!")
+                break
+
+            # Generic wait
+            time.sleep(1)
+            waited += 1
+
+        html = page.html
+
+        if not html:
+            print("❌ Failed to get page content")
+            return []
+
+        # Check for remaining Cloudflare blocks
+        if "Just a moment" in html or "cf-browser-verification" in html:
+            print("❌ Cloudflare challenge not resolved")
+            with open("cf_blocked.html", "w", encoding="utf-8") as f:
+                f.write(html)
+            print("   Response saved to cf_blocked.html")
+            return []
+
+        print(f"   Got page ({len(html)} bytes)")
+
+        # Save raw HTML for debugging
+        with open("booking_kai_output.html", "w", encoding="utf-8") as f:
             f.write(html)
-        print("   Response saved to cf_blocked.html")
-        return []
 
-    if "cf_chl_opt" in html or "challenge-platform" in html:
-        print("❌ Blocked by Cloudflare JS challenge")
-        with open("cf_blocked.html", "w", encoding="utf-8") as f:
-            f.write(html)
-        print("   Response saved to cf_blocked.html")
-        return []
+        # Parse trains from DOM directly via DrissionPage
+        trains = []
+        blocks = page.eles(".data-block.list-kereta")
 
-    if resp.status_code != 200:
-        print(f"❌ HTTP {resp.status_code}")
-        return []
+        for block in blocks:
+            # Extract hidden input values
+            inputs = {}
+            for inp in block.eles("input[type=hidden]"):
+                name = inp.attr("name") or ""
+                value = inp.attr("value") or ""
+                if name:
+                    inputs[name] = value
 
-    print(f"✅ Got response ({len(html)} bytes)")
+            # Check availability
+            availability = "AVAILABLE"
+            seats_left = "1"
 
-    # Save raw HTML for debugging
-    with open("booking_kai_output.html", "w", encoding="utf-8") as f:
-        f.write(html)
-
-    # Parse trains
-    return parse_trains(html)
-
-
-def parse_trains(html: str) -> list[dict]:
-    """Parse train data dari HTML booking.kai.id."""
-    soup = BeautifulSoup(html, "html.parser")
-    trains = []
-
-    # Find all train blocks: div.data-block.list-kereta
-    blocks = soup.find_all("div", class_=lambda c: c and "data-block" in c and "list-kereta" in c)
-
-    for block in blocks:
-        # Extract hidden input values
-        inputs = {}
-        for inp in block.find_all("input", type="hidden"):
-            name = inp.get("name", "")
-            value = inp.get("value", "")
-            if name:
-                inputs[name] = value
-
-        # Check availability
-        availability = "AVAILABLE"
-        seats_left = "1"
-
-        # Check for "habis" class on <a> tags
-        habis_link = block.find("a", class_=lambda c: c and "habis" in c)
-        if habis_link:
-            availability = "FULL"
-            seats_left = "0"
-
-        # Check sisa-kursi text
-        sisa = block.find("small", class_=lambda c: c and "sisa-kursi" in c)
-        if sisa:
-            text = sisa.get_text(strip=True)
-            if text == "Habis":
+            habis = block.eles("a.habis")
+            if habis:
                 availability = "FULL"
                 seats_left = "0"
-            elif text == "Tersedia":
-                availability = "AVAILABLE"
-                seats_left = "1"
 
-        # Build class string
-        class_str = inputs.get("kelas_gerbong", "")
-        subkelas = inputs.get("subkelas", "")
-        if subkelas:
-            class_str += f" ({subkelas})"
+            sisa_elements = block.eles("small.sisa-kursi")
+            for sisa in sisa_elements:
+                text = sisa.text.strip()
+                if text == "Habis":
+                    availability = "FULL"
+                    seats_left = "0"
+                elif text == "Tersedia":
+                    availability = "AVAILABLE"
+                    seats_left = "1"
 
-        # Format price
-        price = inputs.get("harga", "")
-        if price:
-            price = f"Rp{int(price):,}".replace(",", ".")
+            # Build class string
+            class_str = inputs.get("kelas_gerbong", "")
+            subkelas = inputs.get("subkelas", "")
+            if subkelas:
+                class_str += f" ({subkelas})"
 
-        trains.append({
-            "name": inputs.get("kereta", "N/A"),
-            "class": class_str,
-            "price": price,
-            "departure": inputs.get("timestart", ""),
-            "arrival": inputs.get("timeend", ""),
-            "availability": availability,
-            "seats_left": seats_left,
-        })
+            # Format price
+            price = inputs.get("harga", "")
+            if price:
+                try:
+                    price = f"Rp{int(price):,}".replace(",", ".")
+                except ValueError:
+                    price = f"Rp{price}"
 
-    return trains
+            trains.append({
+                "name": inputs.get("kereta", "N/A"),
+                "class": class_str,
+                "price": price,
+                "departure": inputs.get("timestart", ""),
+                "arrival": inputs.get("timeend", ""),
+                "availability": availability,
+                "seats_left": seats_left,
+            })
+
+        return trains
+
+    finally:
+        page.quit()
 
 
 def print_results(trains: list[dict]):
