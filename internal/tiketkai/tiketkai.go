@@ -11,10 +11,13 @@ import (
 	"io"
 	"log/slog"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"golang.org/x/net/proxy"
 
 	"tiket-kereta-notifier/internal/common"
 	"tiket-kereta-notifier/internal/history"
@@ -368,15 +371,34 @@ func (p *Provider) IsPaused() bool {
 	return p.status.IsPaused()
 }
 
-// createHTTPClient creates an HTTP client with optional proxy support
+// createHTTPClient creates an HTTP client with optional SOCKS5/HTTP proxy support
 func (p *Provider) createHTTPClient() *http.Client {
 	transport := &http.Transport{}
 
 	if p.ProxyURL != "" {
-		proxyURL, err := url.Parse(p.ProxyURL)
-		if err == nil {
-			transport.Proxy = http.ProxyURL(proxyURL)
-			p.Logger.Debug("Using proxy", "url", p.ProxyURL)
+		parsedURL, err := url.Parse(p.ProxyURL)
+		if err != nil {
+			p.Logger.Error("Invalid proxy URL", "url", p.ProxyURL, "error", err)
+		} else if strings.HasPrefix(parsedURL.Scheme, "socks5") {
+			// SOCKS5 proxy: use golang.org/x/net/proxy dialer
+			dialer, dialErr := proxy.FromURL(parsedURL, proxy.Direct)
+			if dialErr != nil {
+				p.Logger.Error("Failed to create SOCKS5 dialer", "error", dialErr)
+			} else {
+				contextDialer, ok := dialer.(proxy.ContextDialer)
+				if ok {
+					transport.DialContext = contextDialer.DialContext
+				} else {
+					transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+						return dialer.Dial(network, addr)
+					}
+				}
+				p.Logger.Debug("Using SOCKS5 proxy", "url", p.ProxyURL)
+			}
+		} else {
+			// HTTP/HTTPS proxy
+			transport.Proxy = http.ProxyURL(parsedURL)
+			p.Logger.Debug("Using HTTP proxy", "url", p.ProxyURL)
 		}
 	}
 
