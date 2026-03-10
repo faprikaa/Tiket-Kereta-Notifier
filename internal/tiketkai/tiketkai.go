@@ -115,12 +115,19 @@ func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 	client := p.createHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("HTTP request to TiketKai failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error: %d", resp.StatusCode)
+		errBody, _ := io.ReadAll(resp.Body)
+		p.Logger.Error("TiketKai non-OK status",
+			"status", resp.StatusCode,
+			"route", fmt.Sprintf("%s→%s", p.Origin, p.Destination),
+			"date", p.Date,
+			"body", truncate(string(errBody), 300),
+		)
+		return nil, fmt.Errorf("TiketKai API HTTP %d: %s", resp.StatusCode, truncate(string(errBody), 200))
 	}
 
 	// Read full body for debugging
@@ -280,7 +287,13 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(string)) 
 
 			trains, err := p.Search(ctx)
 			if err != nil {
-				p.Logger.Error("Poll failed", "error", err)
+				p.Logger.Error("Poll failed",
+					"provider", "TiketKai",
+					"route", fmt.Sprintf("%s→%s", p.Origin, p.Destination),
+					"date", p.Date,
+					"train", p.TrainName,
+					"error", err,
+				)
 				p.status.RecordCheckError(err.Error())
 				p.history.Add(common.CheckResult{
 					Timestamp: time.Now(),
@@ -396,4 +409,12 @@ func encryptAESBase64(plaintext string, key, iv string) (string, error) {
 	mode.CryptBlocks(ciphertext, plaintextBytes)
 
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// truncate limits a string to maxLen characters, appending "..." if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

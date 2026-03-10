@@ -474,7 +474,13 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			p.Logger.Debug("Scheduler checking BookingKAI...")
 			trains, err := p.Search(ctx)
 			if err != nil {
-				p.Logger.Error("Poll failed", "error", err)
+				p.Logger.Error("Poll failed",
+					"provider", "BookingKAI",
+					"route", fmt.Sprintf("%s→%s", p.Origin, p.Destination),
+					"date", p.Date,
+					"train", p.TrainName,
+					"error", err,
+				)
 				p.status.RecordCheckError(err.Error())
 				p.history.Add(common.CheckResult{
 					Timestamp: time.Now(),

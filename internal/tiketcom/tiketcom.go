@@ -161,10 +161,16 @@ func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 	)
 
 	cmd := exec.CommandContext(ctx, "curl_chrome110", args...)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		p.Logger.Error("Failed to execute curl_chrome110", "error", err)
-		return nil, fmt.Errorf("curl execution failed: %w", err)
+		p.Logger.Error("Failed to execute curl_chrome110",
+			"error", err,
+			"output", truncate(string(out), 500),
+			"proxy", p.ProxyURL,
+			"route", fmt.Sprintf("%s→%s", p.Origin, p.Destination),
+		)
+		return nil, fmt.Errorf("curl execution failed (proxy=%s): %w\nOutput: %s",
+			p.ProxyURL, err, truncate(string(out), 200))
 	}
 
 	// Parse response
@@ -304,7 +310,13 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			p.Logger.Debug("Scheduler checking Tiket.com...")
 			trains, err := p.Search(ctx)
 			if err != nil {
-				p.Logger.Error("Poll failed", "error", err)
+				p.Logger.Error("Poll failed",
+					"provider", "Tiket.com",
+					"route", fmt.Sprintf("%s→%s", p.Origin, p.Destination),
+					"date", p.Date,
+					"train", p.TrainName,
+					"error", err,
+				)
 				p.status.RecordCheckError(err.Error())
 				p.history.Add(common.CheckResult{
 					Timestamp: time.Now(),
@@ -377,4 +389,12 @@ func (p *Provider) SetPaused(paused bool) {
 // IsPaused returns whether the provider is paused
 func (p *Provider) IsPaused() bool {
 	return p.status.IsPaused()
+}
+
+// truncate limits a string to maxLen characters, appending "..." if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
