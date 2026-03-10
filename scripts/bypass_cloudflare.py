@@ -62,17 +62,34 @@ def search_trains(origin: str, dest: str, date: str, proxy: str = "") -> list[di
 
     # Setup browser options
     options = ChromiumOptions()
+
+    # Auto-detect Chromium path on Linux
+    import shutil
+    for browser_path in [
+        shutil.which("chromium-browser"),
+        shutil.which("chromium"),
+        shutil.which("google-chrome"),
+        shutil.which("google-chrome-stable"),
+        "/usr/bin/chromium-browser",
+        "/usr/bin/chromium",
+        "/usr/bin/google-chrome",
+    ]:
+        if browser_path:
+            options.set_browser_path(browser_path)
+            print(f"   Browser: {browser_path}")
+            break
+
     if HEADLESS:
-        options.headless()
+        options.set_argument("--headless=new")
     if proxy:
         options.set_proxy(proxy)
         print(f"   Proxy: {proxy}")
 
-    # Disable unnecessary features for speed
-    options.set_argument("--disable-images")
+    # Required for Linux headless server
     options.set_argument("--no-sandbox")
     options.set_argument("--disable-dev-shm-usage")
     options.set_argument("--disable-gpu")
+    options.set_argument("--disable-software-rasterizer")
 
     page = ChromiumPage(options)
 
