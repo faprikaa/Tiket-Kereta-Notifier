@@ -11,10 +11,13 @@ import (
 	"io"
 	"log/slog"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"golang.org/x/net/proxy"
 
 	"tiket-kereta-notifier/internal/common"
 	"tiket-kereta-notifier/internal/history"
@@ -106,23 +109,30 @@ func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 	req.Header.Add("origin", "https://m.tiketkai.com")
 	req.Header.Add("priority", "u=1, i")
 	req.Header.Add("referer", "https://m.tiketkai.com/")
-	req.Header.Add("sec-ch-ua", "\"Not(A:Brand\";v=\"8\", \"Chromium\";v=\"144\", \"Microsoft Edge\";v=\"144\"")
+	req.Header.Add("sec-ch-ua", "\"Not:A-Brand\";v=\"99\", \"Microsoft Edge\";v=\"145\", \"Chromium\";v=\"145\"")
 	req.Header.Add("sec-ch-ua-mobile", "?0")
 	req.Header.Add("sec-ch-ua-platform", "\"Windows\"")
 	req.Header.Add("sec-fetch-dest", "empty")
 	req.Header.Add("sec-fetch-mode", "cors")
 	req.Header.Add("sec-fetch-site", "cross-site")
-	req.Header.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 Edg/144.0.0.0")
+	req.Header.Add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0")
 
 	client := p.createHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("HTTP request to TiketKai failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error: %d", resp.StatusCode)
+		errBody, _ := io.ReadAll(resp.Body)
+		p.Logger.Error("TiketKai non-OK status",
+			"status", resp.StatusCode,
+			"route", fmt.Sprintf("%s→%s", p.Origin, p.Destination),
+			"date", p.Date,
+			"body", truncate(string(errBody), 300),
+		)
+		return nil, fmt.Errorf("TiketKai API HTTP %d: %s", resp.StatusCode, truncate(string(errBody), 200))
 	}
 
 	// Read full body for debugging
@@ -282,7 +292,13 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(string)) 
 
 			trains, err := p.Search(ctx)
 			if err != nil {
-				p.Logger.Error("Poll failed", "error", err)
+				p.Logger.Error("Poll failed",
+					"provider", "TiketKai",
+					"route", fmt.Sprintf("%s→%s", p.Origin, p.Destination),
+					"date", p.Date,
+					"train", p.TrainName,
+					"error", err,
+				)
 				p.status.RecordCheckError(err.Error())
 				p.history.Add(common.CheckResult{
 					Timestamp: time.Now(),
@@ -364,21 +380,40 @@ func (p *Provider) IsPaused() bool {
 	return p.status.IsPaused()
 }
 
-// createHTTPClient creates an HTTP client with optional proxy support
+// createHTTPClient creates an HTTP client with optional SOCKS5/HTTP proxy support
 func (p *Provider) createHTTPClient() *http.Client {
 	transport := &http.Transport{}
 
 	if p.ProxyURL != "" {
-		proxyURL, err := url.Parse(p.ProxyURL)
-		if err == nil {
-			transport.Proxy = http.ProxyURL(proxyURL)
-			p.Logger.Debug("Using proxy", "url", p.ProxyURL)
+		parsedURL, err := url.Parse(p.ProxyURL)
+		if err != nil {
+			p.Logger.Error("Invalid proxy URL", "url", p.ProxyURL, "error", err)
+		} else if strings.HasPrefix(parsedURL.Scheme, "socks5") {
+			// SOCKS5 proxy: use golang.org/x/net/proxy dialer
+			dialer, dialErr := proxy.FromURL(parsedURL, proxy.Direct)
+			if dialErr != nil {
+				p.Logger.Error("Failed to create SOCKS5 dialer", "error", dialErr)
+			} else {
+				contextDialer, ok := dialer.(proxy.ContextDialer)
+				if ok {
+					transport.DialContext = contextDialer.DialContext
+				} else {
+					transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+						return dialer.Dial(network, addr)
+					}
+				}
+				p.Logger.Debug("Using SOCKS5 proxy", "url", p.ProxyURL)
+			}
+		} else {
+			// HTTP/HTTPS proxy
+			transport.Proxy = http.ProxyURL(parsedURL)
+			p.Logger.Debug("Using HTTP proxy", "url", p.ProxyURL)
 		}
 	}
 
 	return &http.Client{
 		Transport: transport,
-		Timeout:   60 * time.Second,
+		Timeout:   120 * time.Second,
 	}
 }
 
@@ -405,4 +440,12 @@ func encryptAESBase64(plaintext string, key, iv string) (string, error) {
 	mode.CryptBlocks(ciphertext, plaintextBytes)
 
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// truncate limits a string to maxLen characters, appending "..." if truncated.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

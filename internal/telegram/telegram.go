@@ -137,8 +137,8 @@ func (b *Bot) SetWebhook(url string) {
 	}
 }
 
-func (b *Bot) StartWebhook(port int, chatIDs []string) error {
-	server := NewWebhookServer(port, b)
+func (b *Bot) StartWebhook(ctx context.Context, port int, chatIDs []string) error {
+	server := NewWebhookServer(port, b, ctx)
 	return server.Start()
 }
 

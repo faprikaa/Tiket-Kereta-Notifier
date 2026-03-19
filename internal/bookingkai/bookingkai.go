@@ -3,17 +3,23 @@ package bookingkai
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
+	"net"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"strings"
 	"time"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/proxy"
 
-	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/launcher"
-	"github.com/go-rod/stealth"
+	utls "github.com/refraction-networking/utls"
 
 	"tiket-kereta-notifier/internal/common"
 	"tiket-kereta-notifier/internal/history"
@@ -39,7 +45,7 @@ type Provider struct {
 	Notes         string        // Optional user notes
 	history       *history.Store
 	status        *common.StatusTracker
-	browser       *rod.Browser
+	client        *http.Client
 }
 
 // NewProvider creates a new BookingKAI provider
@@ -78,35 +84,104 @@ func formatDateIndo(date string) (string, error) {
 	return fmt.Sprintf("%02d-%s-%d", t.Day(), month, t.Year()), nil
 }
 
-// ensureBrowser launches a shared browser instance (reused across searches)
-func (p *Provider) ensureBrowser() error {
-	if p.browser != nil {
-		return nil
+// dialUTLS dials addr via TCP (optionally through a SOCKS5 proxy), performs a
+// uTLS handshake impersonating Chrome, and returns the connection.
+// The proxyURL parameter is the SOCKS5 proxy URL string (e.g. "socks5h://127.0.0.1:40000").
+func dialUTLS(ctx context.Context, network, addr, proxyURL string) (net.Conn, error) {
+	var rawConn net.Conn
+	var err error
+
+	if proxyURL != "" {
+		u, parseErr := url.Parse(proxyURL)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid proxy URL: %w", parseErr)
+		}
+		dialer, dialErr := proxy.FromURL(u, proxy.Direct)
+		if dialErr != nil {
+			return nil, fmt.Errorf("socks5 dialer: %w", dialErr)
+		}
+		rawConn, err = dialer.Dial(network, addr)
+	} else {
+		var d net.Dialer
+		rawConn, err = d.DialContext(ctx, network, addr)
 	}
-
-	l := launcher.New().
-		Headless(true).
-		Set("no-sandbox").
-		Set("disable-dev-shm-usage").
-		Set("disable-gpu")
-
-	if p.ProxyURL != "" {
-		l = l.Proxy(p.ProxyURL)
-	}
-
-	u, err := l.Launch()
 	if err != nil {
-		return fmt.Errorf("failed to launch browser: %w", err)
+		return nil, err
 	}
 
-	browser := rod.New().ControlURL(u)
-	if err := browser.Connect(); err != nil {
-		return fmt.Errorf("failed to connect to browser: %w", err)
+	host, _, splitErr := net.SplitHostPort(addr)
+	if splitErr != nil {
+		host = addr
 	}
 
-	p.browser = browser
-	p.Logger.Info("Browser launched", "proxy", p.ProxyURL)
-	return nil
+	uconn := utls.UClient(rawConn, &utls.Config{
+		ServerName: host,
+	}, utls.HelloChrome_Auto)
+
+	if err := uconn.HandshakeContext(ctx); err != nil {
+		rawConn.Close()
+		return nil, fmt.Errorf("uTLS handshake failed: %w", err)
+	}
+	return uconn, nil
+}
+
+// ensureClient lazily initializes the HTTP client using http2.Transport + uTLS.
+// We use http2.Transport directly because booking.kai.id (behind Cloudflare)
+// negotiates HTTP/2 via ALPN, and http.Transport cannot handle HTTP/2 frames
+// when a custom DialTLS is used.
+func (p *Provider) ensureClient() {
+	if p.client != nil {
+		return
+	}
+
+	jar, _ := cookiejar.New(nil)
+	proxyURL := p.ProxyURL
+
+	t2 := &http2.Transport{
+		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+			return dialUTLS(ctx, network, addr, proxyURL)
+		},
+		// Allow plain HTTP connections through the transport (needed for some redirect chains)
+		AllowHTTP: false,
+	}
+
+	p.client = &http.Client{
+		Transport: t2,
+		Jar:       jar,
+		Timeout:   60 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("too many redirects")
+			}
+			setBrowserHeaders(req, req.URL.String())
+			return nil
+		},
+	}
+
+	p.Logger.Info("BookingKAI HTTP client (uTLS+HTTP2) initialized", "proxy", p.ProxyURL)
+}
+
+// setBrowserHeaders sets browser-like headers on the request, matching
+// the real Chrome request captured in bookingkai.md.
+func setBrowserHeaders(req *http.Request, referer string) {
+	req.Header.Set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("accept-language", "en-US,en;q=0.8")
+	req.Header.Set("cache-control", "no-cache")
+	req.Header.Set("pragma", "no-cache")
+	req.Header.Set("priority", "u=0, i")
+	req.Header.Set("sec-ch-ua", `"Not:A-Brand";v="99", "Brave";v="133", "Chromium";v="133"`)
+	req.Header.Set("sec-ch-ua-mobile", "?0")
+	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
+	req.Header.Set("sec-fetch-dest", "document")
+	req.Header.Set("sec-fetch-mode", "navigate")
+	req.Header.Set("sec-fetch-site", "same-origin")
+	req.Header.Set("sec-fetch-user", "?1")
+	req.Header.Set("sec-gpc", "1")
+	req.Header.Set("upgrade-insecure-requests", "1")
+	req.Header.Set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36")
+	if referer != "" {
+		req.Header.Set("referer", referer)
+	}
 }
 
 // Search performs a search and returns trains matching TrainName
@@ -137,11 +212,9 @@ func (p *Provider) SearchAll(ctx context.Context) ([]common.Train, error) {
 	return p.fetchTrains(ctx)
 }
 
-// fetchTrains navigates to booking.kai.id and parses the HTML result
+// fetchTrains sends an HTTP request to booking.kai.id and parses the HTML result.
 func (p *Provider) fetchTrains(ctx context.Context) ([]common.Train, error) {
-	if err := p.ensureBrowser(); err != nil {
-		return nil, err
-	}
+	p.ensureClient()
 
 	// Format date for URL
 	dateIndo, err := formatDateIndo(p.Date)
@@ -152,48 +225,43 @@ func (p *Provider) fetchTrains(ctx context.Context) ([]common.Train, error) {
 	// Build search URL
 	searchURL := fmt.Sprintf(
 		"https://booking.kai.id/?origination=%s&destination=%s&tanggal=%s&adult=1&infant=0&submit=Cari+%%26+Pesan+Tiket",
-		p.Origin, p.Destination, strings.ReplaceAll(dateIndo, " ", "+"),
+		p.Origin, p.Destination, url.QueryEscape(dateIndo),
 	)
 
 	p.Logger.Debug("Fetching booking.kai.id", "url", searchURL)
 
-	// Open new page with stealth
-	page, err := stealth.Page(p.browser)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 	if err != nil {
-		// Browser may have crashed, reset and retry
-		p.browser = nil
-		return nil, fmt.Errorf("failed to create stealth page: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	defer page.Close()
+	setBrowserHeaders(req, "https://booking.kai.id/")
 
-	// Set timeout for the entire operation
-	page = page.Timeout(90 * time.Second)
-
-	// Navigate
-	if err := page.Navigate(searchURL); err != nil {
-		return nil, fmt.Errorf("navigate failed: %w", err)
-	}
-
-	// Wait for train results to appear (instead of fixed 15s sleep)
-	// The page has .data-wrapper elements when train data loads
-	p.Logger.Debug("Waiting for search results...")
-	_, err = page.Element(".data-wrapper")
+	resp, err := p.client.Do(req)
 	if err != nil {
-		// Fallback: maybe Cloudflare is blocking, check page content
-		htmlContent, _ := page.HTML()
-		if strings.Contains(htmlContent, "Just a moment") || strings.Contains(htmlContent, "cf-browser-verification") {
-			return nil, fmt.Errorf("blocked by Cloudflare challenge")
-		}
-		return nil, fmt.Errorf("timeout waiting for results: %w", err)
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Small extra wait for all elements to finish rendering
-	time.Sleep(1 * time.Second)
+	htmlContent := string(body)
 
-	// Get the rendered HTML
-	htmlContent, err := page.HTML()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get HTML: %w", err)
+	// Detect Cloudflare challenges
+	if resp.StatusCode == 403 || strings.Contains(htmlContent, "Just a moment") || strings.Contains(htmlContent, "cf-browser-verification") {
+		return nil, fmt.Errorf("blocked by Cloudflare challenge (status %d)", resp.StatusCode)
+	}
+	if strings.Contains(htmlContent, "cf_chl_opt") || strings.Contains(htmlContent, "challenge-platform") {
+		return nil, fmt.Errorf("blocked by Cloudflare JS challenge")
+	}
+	if strings.Contains(htmlContent, "cfwaitingroom") || strings.Contains(htmlContent, "Waiting Room") {
+		return nil, fmt.Errorf("blocked by Cloudflare Waiting Room")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected HTTP status %d", resp.StatusCode)
 	}
 
 	// Parse trains from HTML
@@ -300,8 +368,7 @@ func extractTrainFromBlock(block *html.Node) common.Train {
 		if n.Type == html.ElementNode && n.Data == "small" {
 			for _, attr := range n.Attr {
 				if attr.Key == "class" && strings.Contains(attr.Val, "sisa-kursi") {
-					text := getTextContent(n)
-					text = strings.TrimSpace(text)
+					text := strings.TrimSpace(getTextContent(n))
 					if text == "Habis" {
 						availability = "FULL"
 						seatsLeft = "0"
@@ -397,10 +464,6 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 	for {
 		select {
 		case <-ctx.Done():
-			// Cleanup browser on shutdown
-			if p.browser != nil {
-				p.browser.Close()
-			}
 			return
 		case <-timer.C:
 			timer.Reset(jitteredInterval())
@@ -414,7 +477,13 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			p.Logger.Debug("Scheduler checking BookingKAI...")
 			trains, err := p.Search(ctx)
 			if err != nil {
-				p.Logger.Error("Poll failed", "error", err)
+				p.Logger.Error("Poll failed",
+					"provider", "BookingKAI",
+					"route", fmt.Sprintf("%s→%s", p.Origin, p.Destination),
+					"date", p.Date,
+					"train", p.TrainName,
+					"error", err,
+				)
 				p.status.RecordCheckError(err.Error())
 				p.history.Add(common.CheckResult{
 					Timestamp: time.Now(),
