@@ -28,7 +28,8 @@ type Provider struct {
 	Month         int
 	Year          int
 	Logger        *slog.Logger
-	TrainName     string        // Optional: specific train to monitor
+	TrainName     string        // Optional: specific train to monitor ("any"/"*" = all trains)
+	MaxPrice      int           // Max price filter in IDR (0 = no filter)
 	CheckInterval time.Duration // Polling interval
 	ProxyURL      string        // Optional SOCKS5 proxy
 	Index         int           // Global index (1-based)
@@ -38,7 +39,7 @@ type Provider struct {
 }
 
 // NewProvider creates a new Traveloka provider
-func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int, trainName string, interval time.Duration, proxyURL string, index int, notes string) *Provider {
+func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int, trainName string, interval time.Duration, proxyURL string, index int, notes string, maxPrice int) *Provider {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
@@ -49,6 +50,7 @@ func NewProvider(logger *slog.Logger, origin, dest string, day, month, year int,
 		Month:         month,
 		Year:          year,
 		TrainName:     trainName,
+		MaxPrice:      maxPrice,
 		CheckInterval: interval,
 		ProxyURL:      proxyURL,
 		Index:         index,
@@ -105,6 +107,13 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			var availableTrains []common.Train
 			for _, t := range trains {
 				if t.SeatsLeft != "0" && t.SeatsLeft != "" {
+					// Apply max price filter if configured
+					if p.MaxPrice > 0 {
+						price := common.ParsePrice(t.Price)
+						if price > 0 && price > p.MaxPrice {
+							continue
+						}
+					}
 					availableTrains = append(availableTrains, t)
 				}
 			}
@@ -240,8 +249,8 @@ func (p *Provider) Search(ctx context.Context) (trains []common.Train, err error
 	// Extract trains from response
 	allTrains := parseTrains(result)
 
-	// Filter if TrainName is specified
-	if p.TrainName != "" {
+	// Filter if TrainName is specified ("any"/"*" = no filter)
+	if p.TrainName != "" && !common.IsWildcard(p.TrainName) {
 		var filtered []common.Train
 		target := strings.ToLower(p.TrainName)
 		for _, t := range allTrains {

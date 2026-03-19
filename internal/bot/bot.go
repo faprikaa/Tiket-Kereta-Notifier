@@ -47,6 +47,13 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 			var available []common.Train
 			for _, t := range trains {
 				if t.Availability == "AVAILABLE" || (t.SeatsLeft != "0" && t.SeatsLeft != "") {
+					// Apply max price filter
+					if flat.MaxPrice > 0 {
+						price := common.ParsePrice(t.Price)
+						if price > 0 && price > flat.MaxPrice {
+							continue
+						}
+					}
 					available = append(available, t)
 				}
 			}
@@ -158,6 +165,9 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 						return "No"
 					}
 				}())
+				if flat.MaxPrice > 0 {
+					msg += fmt.Sprintf("💰 Max Price: Rp %s\n", formatRupiah(flat.MaxPrice))
+				}
 				if flat.Notes != "" {
 					msg += fmt.Sprintf("📝 Notes: %s\n", flat.Notes)
 				}
@@ -170,22 +180,24 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 
 		// List all trains, grouped by train identity
 		var sb strings.Builder
-		sb.WriteString("🚂 Configured Trains:\n")
+		sb.WriteString("🚂 *Configured Trains*\n")
 
 		providerEmoji := map[string]string{
 			"traveloka":  "✈️",
-			"tiketkai":   "🚂",
+			"tiketkai":   "🚉",
 			"tiketcom":   "🎫",
 			"bookingkai": "🏛️",
 		}
 
 		flatIdx := 0
 		for _, trainCfg := range cfg.Trains {
-			sb.WriteString(fmt.Sprintf("\n━━ %s [%s] ━━\n", trainCfg.Name, trainCfg.Date))
-			sb.WriteString(fmt.Sprintf("📍 %s → %s | ⏱️ %v\n", trainCfg.Origin, trainCfg.Destination, trainCfg.IntervalDuration))
+			// Train header
+			sb.WriteString(fmt.Sprintf("\n🚂 *%s* | %s → %s\n", trainCfg.Name, trainCfg.Origin, trainCfg.Destination))
+			sb.WriteString(fmt.Sprintf("📅 %s", trainCfg.Date))
 			if trainCfg.Notes != "" {
-				sb.WriteString(fmt.Sprintf("📝 %s\n", trainCfg.Notes))
+				sb.WriteString(fmt.Sprintf(" | 📝 %s", trainCfg.Notes))
 			}
+			sb.WriteString("\n")
 
 			for i := 0; i < len(trainCfg.Providers); i++ {
 				if flatIdx >= len(cfg.FlatTrains) {
@@ -193,16 +205,28 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 				}
 				provider := providers[flatIdx]
 				flat := cfg.FlatTrains[flatIdx]
-
 				status := provider.GetStatus()
-				lastCheck := "Never"
+
+				// Status icon from last check
+				statusIcon := "⬜"
 				if !status.LastCheckTime.IsZero() {
-					lastCheck = formatDuration(time.Since(status.LastCheckTime)) + " ago"
+					if status.LastCheckError != "" {
+						statusIcon = "❌"
+					} else if status.LastCheckFound {
+						statusIcon = "✅"
+					} else {
+						statusIcon = "⛔"
+					}
 				}
 
-				pausedIcon := ""
+				// Paused overrides status
 				if provider.IsPaused() {
-					pausedIcon = "🔇 "
+					statusIcon = "⏸️"
+				}
+
+				lastCheck := "never"
+				if !status.LastCheckTime.IsZero() {
+					lastCheck = formatDuration(time.Since(status.LastCheckTime)) + " ago"
 				}
 
 				emoji := providerEmoji[flat.ProviderName]
@@ -210,17 +234,18 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 					emoji = "🔌"
 				}
 
-				providerDisplay := strings.ToUpper(flat.ProviderName)
+				providerLabel := strings.ToUpper(flat.ProviderName)
 				if flat.ProxyURL != "" {
-					providerDisplay += " (proxy)"
+					providerLabel += " (proxy)"
 				}
 
-				sb.WriteString(fmt.Sprintf("%2d. %s%s %s | %s\n", flatIdx+1, pausedIcon, emoji, providerDisplay, lastCheck))
+				sb.WriteString(fmt.Sprintf(" %s %s %s | #%d | %s\n",
+					statusIcon, emoji, providerLabel, flatIdx+1, lastCheck))
 				flatIdx++
 			}
 		}
 
-		sb.WriteString("\n/list [n] details | /toggle [n] pause/resume")
+		sb.WriteString("\n/list <n> · /check <n> · /toggle <n>")
 
 		telegram.SendMessage(sb.String(), chatID)
 	})
@@ -378,6 +403,13 @@ func checkTrainResult(ctx context.Context, provider common.Provider, flat config
 	var available []common.Train
 	for _, t := range trains {
 		if t.Availability == "AVAILABLE" || (t.SeatsLeft != "0" && t.SeatsLeft != "") {
+			// Apply max price filter
+			if flat.MaxPrice > 0 {
+				price := common.ParsePrice(t.Price)
+				if price > 0 && price > flat.MaxPrice {
+					continue
+				}
+			}
 			available = append(available, t)
 		}
 	}
@@ -436,6 +468,24 @@ func showTrainStatus(chatID string, provider common.Provider, flat config.FlatTr
 	)
 
 	telegram.SendMessage(msg, chatID)
+}
+
+// formatRupiah formats an integer as an Indonesian Rupiah string with dot separators
+// e.g. 350000 -> "350.000"
+func formatRupiah(amount int) string {
+	s := strconv.Itoa(amount)
+	n := len(s)
+	if n <= 3 {
+		return s
+	}
+	var result strings.Builder
+	for i, c := range s {
+		if i > 0 && (n-i)%3 == 0 {
+			result.WriteByte('.')
+		}
+		result.WriteRune(c)
+	}
+	return result.String()
 }
 
 // formatDuration formats a duration into a human readable string

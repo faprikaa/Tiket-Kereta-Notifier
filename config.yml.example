@@ -22,6 +22,37 @@ trains:
       - traveloka
       - tiketkai
 
+  # Wildcard: name "any" atau "*" = ambil semua kereta yang ada di rute tersebut
+  # Berguna jika kamu tidak peduli kereta apa, asal ada kursi
+  # - name: "any"
+  #   origin: GMR
+  #   destination: YK
+  #   date: "2026-04-02"
+  #   interval: 300
+  #   providers:
+  #     - traveloka
+
+  # Filter harga: max_price = harga maksimal dalam Rupiah (0 atau tidak diisi = tanpa filter)
+  # Contoh: hanya notifikasi jika harga tiket <= Rp 350.000
+  # - name: BENGAWAN
+  #   origin: LPN
+  #   destination: CKR
+  #   date: "2026-04-02"
+  #   interval: 300
+  #   max_price: 350000
+  #   providers:
+  #     - traveloka
+
+  # Kombinasi wildcard + price filter: semua kereta di rute ini yang <= Rp 500.000
+  # - name: "*"
+  #   origin: GMR
+  #   destination: YK
+  #   date: "2026-04-02"
+  #   interval: 300
+  #   max_price: 500000
+  #   providers:
+  #     - traveloka
+
   # Contoh: kereta dengan provider yang butuh proxy
   # - name: ARGO DWIPANGGA
   #   origin: GMR

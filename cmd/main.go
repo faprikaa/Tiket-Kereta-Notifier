@@ -144,6 +144,7 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, flat *config
 			flat.ProxyURL,
 			index,
 			flat.Notes,
+			flat.MaxPrice,
 		), nil
 
 	case "traveloka":
@@ -158,6 +159,7 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, flat *config
 			flat.ProxyURL,
 			index,
 			flat.Notes,
+			flat.MaxPrice,
 		), nil
 
 	case "tiketcom":
@@ -171,6 +173,7 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, flat *config
 			flat.ProxyURL,
 			index,
 			flat.Notes,
+			flat.MaxPrice,
 		)
 
 		// Test connection
@@ -191,6 +194,7 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, flat *config
 			flat.ProxyURL,
 			index,
 			flat.Notes,
+			flat.MaxPrice,
 		), nil
 
 	default:
@@ -235,6 +239,11 @@ func validateTrainsExist(ctx context.Context, logger *slog.Logger, providers []c
 	groups := make(map[trainKey][]int)
 	var groupOrder []trainKey // preserve order
 	for i, flat := range cfg.FlatTrains {
+		// Skip validation for wildcard names ("any"/"*") - they match all trains
+		if common.IsWildcard(flat.Name) {
+			logger.Info("Wildcard train name, skipping validation", "route", fmt.Sprintf("%s → %s", flat.Origin, flat.Destination))
+			continue
+		}
 		if flat.Name == "" {
 			logger.Info("No train name filter, skipping validation", "route", fmt.Sprintf("%s → %s", flat.Origin, flat.Destination))
 			continue

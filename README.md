@@ -7,6 +7,8 @@ Bot Telegram untuk monitoring ketersediaan tiket kereta api dari TiketKai, Trave
 - ✅ **Multi-Train Monitoring** - Monitor banyak kereta sekaligus
 - ✅ **Per-Train Provider** - Setiap kereta bisa pakai provider berbeda
 - ✅ **Per-Train Proxy** - Setiap kereta (tiketcom) bisa pakai proxy berbeda
+- ✅ **Wildcard Train Name** - Pakai `"any"` / `"*"` untuk monitor semua kereta di rute
+- ✅ **Filter Harga** - Filter tiket berdasarkan harga maksimal (Rupiah)
 - ✅ **YAML Config** - Konfigurasi mudah via file YAML
 - ✅ **Startup Validation** - Verifikasi kereta ada sebelum monitoring
 - ✅ **Telegram Bot** - Notifikasi real-time via Telegram
@@ -63,7 +65,7 @@ webhook:
   port: 8080
 
 trains:
-  # Satu entry per kereta, bisa punya banyak provider
+  # Monitor kereta spesifik via banyak provider
   - name: BENGAWAN
     origin: LPN
     destination: CKR
@@ -73,6 +75,35 @@ trains:
     providers:
       - traveloka
       - tiketkai
+
+  # Wildcard: monitor SEMUA kereta di rute ini (tidak filter nama)
+  - name: "any"         # atau: "*"
+    origin: GMR
+    destination: YK
+    date: "2026-04-05"
+    interval: 300
+    providers:
+      - traveloka
+
+  # Filter harga: hanya notif jika tersedia dengan harga <= Rp 350.000
+  - name: BOGOWONTO
+    origin: LPN
+    destination: GMR
+    date: "2026-04-05"
+    interval: 300
+    max_price: 350000
+    providers:
+      - tiketkai
+
+  # Kombinasi: semua kereta di rute, asalkan harganya <= Rp 500.000
+  - name: "*"
+    origin: GMR
+    destination: YK
+    date: "2026-04-05"
+    interval: 300
+    max_price: 500000
+    providers:
+      - traveloka
 
   # Kereta dengan provider yang butuh proxy
   - name: ARGO DWIPANGGA
@@ -94,13 +125,14 @@ trains:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `name` | Yes | Nama kereta (filter/target) |
+| `name` | Yes | Nama kereta. Gunakan `"any"` atau `"*"` untuk semua kereta di rute |
 | `origin` | Yes | Kode stasiun asal |
 | `destination` | Yes | Kode stasiun tujuan |
 | `date` | Yes | Tanggal (YYYY-MM-DD) |
 | `providers` | Yes | Array provider (string atau object dengan `proxy_url`) |
 | `interval` | No | Interval check dalam detik (default: 300) |
-| `notes` | No | Catatan opsional, muncul di /list dan notifikasi |
+| `max_price` | No | Harga maksimal dalam Rupiah — hanya notif jika harga ≤ nilai ini (0 = tanpa filter) |
+| `notes` | No | Catatan opsional, muncul di `/list` dan notifikasi |
 
 ## Usage
 
@@ -128,7 +160,7 @@ go run cmd/main.go -c myconfig.yml
 **Contoh:**
 ```
 /list              # Lihat semua kereta
-/list 1            # Detail kereta #1
+/list 1            # Detail kereta #1 (termasuk max_price jika diset)
 /check             # Check semua kereta
 /check 1           # Check kereta pertama saja
 /all 1             # Tampilkan semua kereta pada route kereta #1
@@ -140,12 +172,16 @@ go run cmd/main.go -c myconfig.yml
 ## Notification Format
 
 ```
-🎫 #3 TIKETCOM [2026-02-16] LPN→CKR
-✅ BOGOWONTO tersedia! (2 found)
-📝 Pulang kampung
+🚂 #3 any
+📍 GMR→YK [2026-04-05]
+✅ Tersedia! (3 found) via traveloka
 
-• Bogowonto [Economy]
-  💺 354 seats @ Rp380.000
+• ARGO DWIPANGGA
+  💺 120 seats @ Rp 285.000
+• BENGAWAN
+  💺 45 seats @ Rp 195.000
+• BOGOWONTO
+  💺 8 seats @ Rp 310.000
 ```
 
 ## Providers
@@ -160,13 +196,13 @@ go run cmd/main.go -c myconfig.yml
 ## Troubleshooting
 
 ### Train not found on startup
-Pastikan nama kereta sesuai dengan yang tampil di provider. Jalankan tanpa filter `name` dulu untuk lihat kereta yang tersedia.
+Pastikan nama kereta sesuai dengan yang tampil di provider. Atau gunakan `name: "any"` sementara untuk melihat daftar kereta yang tersedia di rute tersebut.
 
 ### Tiket.com blocked by Turnstile
 Gunakan proxy via `proxy_url` atau pastikan `curl_chrome110` terinstall.
 
 ### Tunnel not accessible
-Pastikan `cloudflared` terinstall dan webhook.enabled = true.
+Pastikan `cloudflared` terinstall dan `webhook.enabled: true`.
 
 ## License
 

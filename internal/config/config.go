@@ -43,6 +43,7 @@ type TrainConfig struct {
 	Date        string          `yaml:"date"` // YYYY-MM-DD
 	Interval    int             `yaml:"interval"`
 	Notes       string          `yaml:"notes,omitempty"`
+	MaxPrice    int             `yaml:"max_price,omitempty"` // Max price filter in IDR (0 = no filter)
 	Providers   []ProviderEntry `yaml:"providers"`
 
 	// Backward compat: single provider field (deprecated, use providers array)
@@ -62,6 +63,7 @@ type FlatTrainConfig struct {
 	Interval         int
 	IntervalDuration time.Duration
 	Notes            string
+	MaxPrice         int // Max price filter in IDR (0 = no filter)
 	ProviderName     string
 	ProxyURL         string
 }
@@ -147,6 +149,7 @@ func (c *Config) processTrainConfigs() {
 				Interval:         train.Interval,
 				IntervalDuration: train.IntervalDuration,
 				Notes:            train.Notes,
+				MaxPrice:         train.MaxPrice,
 				ProviderName:     strings.ToLower(prov.Name),
 				ProxyURL:         prov.ProxyURL,
 			})

@@ -31,7 +31,8 @@ type Provider struct {
 	Origin        string
 	Destination   string
 	Date          string        // YYYY-MM-DD format
-	TrainName     string        // Optional: specific train to monitor
+	TrainName     string        // Optional: specific train to monitor ("any"/"*" = all trains)
+	MaxPrice      int           // Max price filter in IDR (0 = no filter)
 	CheckInterval time.Duration // Polling interval
 	ProxyURL      string        // Optional SOCKS5 proxy
 	Index         int           // Global index (1-based)
@@ -42,7 +43,7 @@ type Provider struct {
 }
 
 // NewProvider creates a new BookingKAI provider
-func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, proxyURL string, index int, notes string) *Provider {
+func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, proxyURL string, index int, notes string, maxPrice int) *Provider {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
@@ -52,6 +53,7 @@ func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, inte
 		Destination:   dest,
 		Date:          date,
 		TrainName:     trainName,
+		MaxPrice:      maxPrice,
 		CheckInterval: interval,
 		ProxyURL:      proxyURL,
 		Index:         index,
@@ -114,7 +116,8 @@ func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 		return nil, err
 	}
 
-	if p.TrainName == "" {
+	// Wildcard "any"/"*" or empty = return all trains
+	if p.TrainName == "" || common.IsWildcard(p.TrainName) {
 		return allTrains, nil
 	}
 
@@ -424,6 +427,13 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			var availableTrains []common.Train
 			for _, t := range trains {
 				if t.SeatsLeft != "0" && t.SeatsLeft != "" {
+					// Apply max price filter if configured
+					if p.MaxPrice > 0 {
+						price := common.ParsePrice(t.Price)
+						if price > 0 && price > p.MaxPrice {
+							continue
+						}
+					}
 					availableTrains = append(availableTrains, t)
 				}
 			}

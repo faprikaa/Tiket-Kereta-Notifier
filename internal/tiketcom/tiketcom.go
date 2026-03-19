@@ -24,7 +24,8 @@ type Provider struct {
 	Origin        string
 	Destination   string
 	Date          string        // YYYYMMDD format
-	TrainName     string        // Optional: specific train to monitor
+	TrainName     string        // Optional: specific train to monitor ("any"/"*" = all trains)
+	MaxPrice      int           // Max price filter in IDR (0 = no filter)
 	CheckInterval time.Duration // Polling interval
 	ProxyURL      string        // SOCKS5 proxy URL (e.g., "socks5h://127.0.0.1:40000")
 	Index         int           // Global index (1-based)
@@ -34,13 +35,14 @@ type Provider struct {
 }
 
 // NewProvider creates a new Tiket.com provider
-func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, proxyURL string, index int, notes string) *Provider {
+func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, proxyURL string, index int, notes string, maxPrice int) *Provider {
 	return &Provider{
 		Logger:        logger,
 		Origin:        origin,
 		Destination:   dest,
 		Date:          date,
 		TrainName:     trainName,
+		MaxPrice:      maxPrice,
 		CheckInterval: interval,
 		ProxyURL:      proxyURL,
 		Index:         index,
@@ -186,8 +188,8 @@ func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 	// Parse trains from response
 	trains := p.parseTrains(result.Data.DepartJourneys.Journeys)
 
-	// Filter by TrainName if configured
-	if p.TrainName != "" {
+	// Filter by TrainName if configured ("any"/"*" = no filter)
+	if p.TrainName != "" && !common.IsWildcard(p.TrainName) {
 		var filtered []common.Train
 		target := strings.ToLower(p.TrainName)
 		for _, t := range trains {
@@ -317,6 +319,13 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			var availableTrains []common.Train
 			for _, t := range trains {
 				if t.SeatsLeft != "0" && t.SeatsLeft != "" {
+					// Apply max price filter if configured
+					if p.MaxPrice > 0 {
+						price := common.ParsePrice(t.Price)
+						if price > 0 && price > p.MaxPrice {
+							continue
+						}
+					}
 					availableTrains = append(availableTrains, t)
 				}
 			}
