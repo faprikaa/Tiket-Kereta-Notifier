@@ -24,7 +24,8 @@ trains:
 
   # Wildcard: name "any" atau "*" = ambil semua kereta yang ada di rute tersebut
   # Berguna jika kamu tidak peduli kereta apa, asal ada kursi
-  # - name: "any"
+  # Tanda petik tidak wajib: `name: any` dan `name: "any"` sama saja
+  # - name: any
   #   origin: GMR
   #   destination: YK
   #   date: "2026-04-02"

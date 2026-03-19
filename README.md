@@ -77,7 +77,8 @@ trains:
       - tiketkai
 
   # Wildcard: monitor SEMUA kereta di rute ini (tidak filter nama)
-  - name: "any"         # atau: "*"
+  # Tanda petik tidak wajib di YAML: `name: any` dan `name: "any"` identik
+  - name: any           # atau: name: "any" atau name: "*"
     origin: GMR
     destination: YK
     date: "2026-04-05"
@@ -125,7 +126,7 @@ trains:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `name` | Yes | Nama kereta. Gunakan `"any"` atau `"*"` untuk semua kereta di rute |
+| `name` | Yes | Nama kereta. Gunakan `any` atau `*` untuk semua kereta di rute. Tanda petik opsional (`name: any` = `name: "any"`) |
 | `origin` | Yes | Kode stasiun asal |
 | `destination` | Yes | Kode stasiun tujuan |
 | `date` | Yes | Tanggal (YYYY-MM-DD) |
