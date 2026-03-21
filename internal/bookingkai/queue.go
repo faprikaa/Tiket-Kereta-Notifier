@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Danny-Dasilva/CycleTLS/cycletls"
+	"github.com/RomainMichau/CycleTLS/cycletls"
 	"github.com/RomainMichau/cloudscraper_go/cloudscraper"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
@@ -40,7 +40,7 @@ type BrowserQueue struct {
 	logger   *slog.Logger
 	proxyURL string
 	browser  *rod.Browser
-	scraper  cloudscraper.CloudScraper
+	scraper  *cloudscraper.CloudScrapper
 	jobs     chan Job
 	done     chan struct{}
 }
@@ -83,6 +83,7 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 	scraper, err := cloudscraper.Init(false, false)
 	if err != nil {
 		logger.Warn("Failed to init cloudscraper", "error", err)
+		scraper = nil
 	}
 
 	q := &BrowserQueue{
