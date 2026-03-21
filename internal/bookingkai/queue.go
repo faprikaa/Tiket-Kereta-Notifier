@@ -51,8 +51,11 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 		Set("disable-dev-shm-usage")
 
 	if proxyURL != "" {
-		l = l.Set("proxy-server", proxyURL)
-		logger.Info("BookingKAI browser using proxy", "proxy", proxyURL)
+		// Chrome doesn't support socks5h:// — convert to socks5://
+		// Chrome's SOCKS5 already resolves DNS remotely by default.
+		chromeProxy := strings.Replace(proxyURL, "socks5h://", "socks5://", 1)
+		l = l.Set("proxy-server", chromeProxy)
+		logger.Info("BookingKAI browser using proxy", "proxy", chromeProxy)
 	}
 
 	controlURL, err := l.Launch()
