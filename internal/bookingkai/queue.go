@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
-	"github.com/go-rod/rod/lib/proto"
+	"github.com/go-rod/stealth"
 
 	"golang.org/x/net/html"
 
@@ -31,8 +31,8 @@ type JobResult struct {
 }
 
 // BrowserQueue serializes all browser requests to booking.kai.id through a
-// single worker goroutine, using a real headless Chrome browser (go-rod) to
-// bypass Cloudflare challenges.
+// single worker goroutine, using a stealth headless Chrome browser (go-rod +
+// stealth) to bypass Cloudflare challenges.
 type BrowserQueue struct {
 	logger  *slog.Logger
 	browser *rod.Browser
@@ -40,15 +40,19 @@ type BrowserQueue struct {
 	done    chan struct{}
 }
 
-// NewBrowserQueue creates a shared browser queue with a headless Chrome instance.
+// NewBrowserQueue creates a shared browser queue with a stealth headless Chrome.
 // All bookingkai providers should share the same queue so requests are serialized.
 func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
-	// Configure browser launcher
+	// Configure browser launcher with anti-detection flags
 	l := launcher.New().
 		Headless(true).
+		Set("disable-blink-features", "AutomationControlled").
 		Set("disable-gpu").
 		Set("no-sandbox").
-		Set("disable-dev-shm-usage")
+		Set("disable-dev-shm-usage").
+		Set("disable-infobars").
+		Set("window-size", "1920,1080").
+		Set("lang", "id-ID,id,en-US,en")
 
 	if proxyURL != "" {
 		// Chrome doesn't support socks5h:// — convert to socks5://
@@ -61,7 +65,6 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 	controlURL, err := l.Launch()
 	if err != nil {
 		logger.Error("Failed to launch browser", "error", err)
-		// Return queue anyway — doFetch will fail with clear error
 		q := &BrowserQueue{
 			logger: logger,
 			jobs:   make(chan Job, 64),
@@ -93,7 +96,7 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 		done:    make(chan struct{}),
 	}
 	go q.worker()
-	logger.Info("BookingKAI browser queue started", "proxy", proxyURL)
+	logger.Info("BookingKAI stealth browser queue started", "proxy", proxyURL)
 	return q
 }
 
@@ -106,23 +109,24 @@ func (q *BrowserQueue) worker() {
 	}
 }
 
-// doFetch navigates the browser to the search URL and extracts train data.
+// doFetch navigates a stealth browser page to the search URL and extracts train data.
 func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.Train, error) {
 	if q.browser == nil {
 		return nil, fmt.Errorf("browser not initialized — launch failed at startup")
 	}
 
-	q.logger.Debug("Browser navigating", "url", searchURL)
+	q.logger.Debug("Browser navigating (stealth)", "url", searchURL)
 
-	// Create a new page for each request to avoid stale state
-	page, err := q.browser.Page(proto.TargetCreateTarget{URL: "about:blank"})
+	// Create a stealth page — patches navigator.webdriver, chrome runtime,
+	// plugins, languages, etc. to evade bot detection.
+	page, err := stealth.Page(q.browser)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create page: %w", err)
+		return nil, fmt.Errorf("failed to create stealth page: %w", err)
 	}
 	defer page.Close()
 
 	// Set a timeout for the entire navigation + wait cycle
-	page = page.Context(ctx).Timeout(60 * time.Second)
+	page = page.Context(ctx).Timeout(90 * time.Second)
 
 	// Navigate to the search URL
 	if err := page.Navigate(searchURL); err != nil {
@@ -145,30 +149,32 @@ func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.
 		return nil, fmt.Errorf("failed to get page HTML: %w", err)
 	}
 
-	// Check if we're still on a Cloudflare challenge page
-	if strings.Contains(htmlContent, "cf_chl_opt") || strings.Contains(htmlContent, "challenge-platform") {
-		// Wait longer for Cloudflare to resolve
-		q.logger.Info("Cloudflare challenge detected, waiting for resolution...")
-		time.Sleep(10 * time.Second)
+	// Check if we're on a Cloudflare challenge page — wait for auto-resolve
+	if isCloudflareChallenge(htmlContent) {
+		q.logger.Info("Cloudflare challenge detected, waiting for auto-resolve...")
 
-		if err := page.WaitStable(2 * time.Second); err != nil {
-			q.logger.Debug("WaitStable after CF challenge timeout")
+		// Poll every 3 seconds for up to 30 seconds
+		for i := 0; i < 10; i++ {
+			time.Sleep(3 * time.Second)
+
+			htmlContent, err = page.HTML()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get page HTML during CF wait: %w", err)
+			}
+
+			if !isCloudflareChallenge(htmlContent) {
+				q.logger.Info("Cloudflare challenge resolved!")
+				break
+			}
+			q.logger.Debug("Still waiting for Cloudflare...", "attempt", i+1)
 		}
 
-		htmlContent, err = page.HTML()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get page HTML after CF wait: %w", err)
-		}
-
-		// Still blocked?
-		if strings.Contains(htmlContent, "cf_chl_opt") || strings.Contains(htmlContent, "challenge-platform") {
-			return nil, fmt.Errorf("blocked by Cloudflare JS challenge")
+		// Final check
+		if isCloudflareChallenge(htmlContent) {
+			return nil, fmt.Errorf("blocked by Cloudflare challenge (timeout after 30s)")
 		}
 	}
 
-	if strings.Contains(htmlContent, "Just a moment") || strings.Contains(htmlContent, "cf-browser-verification") {
-		return nil, fmt.Errorf("blocked by Cloudflare challenge page")
-	}
 	if strings.Contains(htmlContent, "cfwaitingroom") || strings.Contains(htmlContent, "Waiting Room") {
 		return nil, fmt.Errorf("blocked by Cloudflare Waiting Room")
 	}
@@ -180,6 +186,14 @@ func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.
 	}
 
 	return trains, nil
+}
+
+// isCloudflareChallenge checks if the HTML indicates a Cloudflare challenge page.
+func isCloudflareChallenge(htmlContent string) bool {
+	return strings.Contains(htmlContent, "cf_chl_opt") ||
+		strings.Contains(htmlContent, "challenge-platform") ||
+		strings.Contains(htmlContent, "Just a moment") ||
+		strings.Contains(htmlContent, "cf-browser-verification")
 }
 
 // parseHTML extracts train information from the booking.kai.id search results page.
