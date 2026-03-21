@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/RomainMichau/cloudscraper_go v0.4.2 // indirect
 	github.com/go-rod/stealth v0.4.9 // indirect
 	github.com/ysmood/fetchup v0.2.3 // indirect
 	github.com/ysmood/goob v0.4.0 // indirect
