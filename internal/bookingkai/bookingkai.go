@@ -6,15 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
-	"net"
 	"net/url"
 	"strings"
 	"time"
 
 	"golang.org/x/net/html"
-	"golang.org/x/net/proxy"
-
-	utls "github.com/refraction-networking/utls"
 
 	"tiket-kereta-notifier/internal/common"
 	"tiket-kereta-notifier/internal/history"
@@ -79,46 +75,7 @@ func formatDateIndo(date string) (string, error) {
 	return fmt.Sprintf("%02d-%s-%d", t.Day(), month, t.Year()), nil
 }
 
-// dialUTLS dials addr via TCP (optionally through a SOCKS5 proxy), performs a
-// uTLS handshake impersonating Chrome, and returns the connection.
-// The proxyURL parameter is the SOCKS5 proxy URL string (e.g. "socks5h://127.0.0.1:40000").
-func dialUTLS(ctx context.Context, network, addr, proxyURL string) (net.Conn, error) {
-	var rawConn net.Conn
-	var err error
 
-	if proxyURL != "" {
-		u, parseErr := url.Parse(proxyURL)
-		if parseErr != nil {
-			return nil, fmt.Errorf("invalid proxy URL: %w", parseErr)
-		}
-		dialer, dialErr := proxy.FromURL(u, proxy.Direct)
-		if dialErr != nil {
-			return nil, fmt.Errorf("socks5 dialer: %w", dialErr)
-		}
-		rawConn, err = dialer.Dial(network, addr)
-	} else {
-		var d net.Dialer
-		rawConn, err = d.DialContext(ctx, network, addr)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	host, _, splitErr := net.SplitHostPort(addr)
-	if splitErr != nil {
-		host = addr
-	}
-
-	uconn := utls.UClient(rawConn, &utls.Config{
-		ServerName: host,
-	}, utls.HelloChrome_Auto)
-
-	if err := uconn.HandshakeContext(ctx); err != nil {
-		rawConn.Close()
-		return nil, fmt.Errorf("uTLS handshake failed: %w", err)
-	}
-	return uconn, nil
-}
 
 // Search performs a search and returns trains matching TrainName
 func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {

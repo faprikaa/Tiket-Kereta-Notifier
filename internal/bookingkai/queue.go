@@ -3,18 +3,16 @@ package bookingkai
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"io"
 	"log/slog"
-	"net"
-	"net/http"
-	"net/http/cookiejar"
 	"strings"
 	"time"
 
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/proto"
+
 	"golang.org/x/net/html"
-	"golang.org/x/net/http2"
 
 	"tiket-kereta-notifier/internal/common"
 )
@@ -32,79 +30,68 @@ type JobResult struct {
 	Err    error
 }
 
-// BrowserQueue serializes all HTTP requests to booking.kai.id through a single
-// worker goroutine, preventing concurrent requests that could trigger rate
-// limiting or Cloudflare challenges.
+// BrowserQueue serializes all browser requests to booking.kai.id through a
+// single worker goroutine, using a real headless Chrome browser (go-rod) to
+// bypass Cloudflare challenges.
 type BrowserQueue struct {
-	logger   *slog.Logger
-	proxyURL string
-	client   *http.Client
-	jobs     chan Job
-	done     chan struct{}
+	logger  *slog.Logger
+	browser *rod.Browser
+	jobs    chan Job
+	done    chan struct{}
 }
 
-// NewBrowserQueue creates a shared browser queue. All bookingkai providers
-// should share the same queue instance so that requests are serialized.
+// NewBrowserQueue creates a shared browser queue with a headless Chrome instance.
+// All bookingkai providers should share the same queue so requests are serialized.
 func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
-	q := &BrowserQueue{
-		logger:   logger,
-		proxyURL: proxyURL,
-		jobs:     make(chan Job, 64),
-		done:     make(chan struct{}),
+	// Configure browser launcher
+	l := launcher.New().
+		Headless(true).
+		Set("disable-gpu").
+		Set("no-sandbox").
+		Set("disable-dev-shm-usage")
+
+	if proxyURL != "" {
+		l = l.Set("proxy-server", proxyURL)
+		logger.Info("BookingKAI browser using proxy", "proxy", proxyURL)
 	}
-	q.initClient()
+
+	controlURL, err := l.Launch()
+	if err != nil {
+		logger.Error("Failed to launch browser", "error", err)
+		// Return queue anyway — doFetch will fail with clear error
+		q := &BrowserQueue{
+			logger: logger,
+			jobs:   make(chan Job, 64),
+			done:   make(chan struct{}),
+		}
+		go q.worker()
+		return q
+	}
+
+	browser := rod.New().ControlURL(controlURL)
+	if err := browser.Connect(); err != nil {
+		logger.Error("Failed to connect to browser", "error", err)
+		q := &BrowserQueue{
+			logger: logger,
+			jobs:   make(chan Job, 64),
+			done:   make(chan struct{}),
+		}
+		go q.worker()
+		return q
+	}
+
+	// Ignore certificate errors (useful with some proxies)
+	browser.IgnoreCertErrors(true)
+
+	q := &BrowserQueue{
+		logger:  logger,
+		browser: browser,
+		jobs:    make(chan Job, 64),
+		done:    make(chan struct{}),
+	}
 	go q.worker()
 	logger.Info("BookingKAI browser queue started", "proxy", proxyURL)
 	return q
-}
-
-// initClient creates the shared HTTP client with uTLS + HTTP/2.
-func (q *BrowserQueue) initClient() {
-	jar, _ := cookiejar.New(nil)
-	proxyURL := q.proxyURL
-
-	t2 := &http2.Transport{
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			return dialUTLS(ctx, network, addr, proxyURL)
-		},
-		AllowHTTP: false,
-	}
-
-	q.client = &http.Client{
-		Transport: t2,
-		Jar:       jar,
-		Timeout:   60 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return fmt.Errorf("too many redirects")
-			}
-			setBrowserHeaders(req, req.URL.String())
-			return nil
-		},
-	}
-}
-
-// setBrowserHeaders sets browser-like headers on the request, matching
-// the real Chrome request captured in bookingkai.md.
-func setBrowserHeaders(req *http.Request, referer string) {
-	req.Header.Set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-	req.Header.Set("accept-language", "en-US,en;q=0.8")
-	req.Header.Set("cache-control", "no-cache")
-	req.Header.Set("pragma", "no-cache")
-	req.Header.Set("priority", "u=0, i")
-	req.Header.Set("sec-ch-ua", `"Not:A-Brand";v="99", "Brave";v="133", "Chromium";v="133"`)
-	req.Header.Set("sec-ch-ua-mobile", "?0")
-	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
-	req.Header.Set("sec-fetch-dest", "document")
-	req.Header.Set("sec-fetch-mode", "navigate")
-	req.Header.Set("sec-fetch-site", "same-origin")
-	req.Header.Set("sec-fetch-user", "?1")
-	req.Header.Set("sec-gpc", "1")
-	req.Header.Set("upgrade-insecure-requests", "1")
-	req.Header.Set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36")
-	if referer != "" {
-		req.Header.Set("referer", referer)
-	}
 }
 
 // worker processes jobs one at a time from the queue channel.
@@ -116,42 +103,71 @@ func (q *BrowserQueue) worker() {
 	}
 }
 
-// doFetch performs the actual HTTP request and HTML parsing.
+// doFetch navigates the browser to the search URL and extracts train data.
 func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.Train, error) {
-	q.logger.Debug("Queue processing request", "url", searchURL)
+	if q.browser == nil {
+		return nil, fmt.Errorf("browser not initialized — launch failed at startup")
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+	q.logger.Debug("Browser navigating", "url", searchURL)
+
+	// Create a new page for each request to avoid stale state
+	page, err := q.browser.Page(proto.TargetCreateTarget{URL: "about:blank"})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create page: %w", err)
 	}
-	setBrowserHeaders(req, "https://booking.kai.id/")
+	defer page.Close()
 
-	resp, err := q.client.Do(req)
+	// Set a timeout for the entire navigation + wait cycle
+	page = page.Context(ctx).Timeout(60 * time.Second)
+
+	// Navigate to the search URL
+	if err := page.Navigate(searchURL); err != nil {
+		return nil, fmt.Errorf("navigation failed: %w", err)
+	}
+
+	// Wait for page to be fully loaded
+	if err := page.WaitLoad(); err != nil {
+		return nil, fmt.Errorf("page load failed: %w", err)
+	}
+
+	// Wait for the page to stabilize (Cloudflare challenge + KAI page render)
+	if err := page.WaitStable(1 * time.Second); err != nil {
+		q.logger.Debug("WaitStable timeout, continuing with current page state")
+	}
+
+	// Get the page HTML
+	htmlContent, err := page.HTML()
 	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		return nil, fmt.Errorf("failed to get page HTML: %w", err)
 	}
 
-	htmlContent := string(body)
-
-	// Detect Cloudflare challenges
-	if resp.StatusCode == 403 || strings.Contains(htmlContent, "Just a moment") || strings.Contains(htmlContent, "cf-browser-verification") {
-		return nil, fmt.Errorf("blocked by Cloudflare challenge (status %d)", resp.StatusCode)
-	}
+	// Check if we're still on a Cloudflare challenge page
 	if strings.Contains(htmlContent, "cf_chl_opt") || strings.Contains(htmlContent, "challenge-platform") {
-		return nil, fmt.Errorf("blocked by Cloudflare JS challenge")
+		// Wait longer for Cloudflare to resolve
+		q.logger.Info("Cloudflare challenge detected, waiting for resolution...")
+		time.Sleep(10 * time.Second)
+
+		if err := page.WaitStable(2 * time.Second); err != nil {
+			q.logger.Debug("WaitStable after CF challenge timeout")
+		}
+
+		htmlContent, err = page.HTML()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get page HTML after CF wait: %w", err)
+		}
+
+		// Still blocked?
+		if strings.Contains(htmlContent, "cf_chl_opt") || strings.Contains(htmlContent, "challenge-platform") {
+			return nil, fmt.Errorf("blocked by Cloudflare JS challenge")
+		}
+	}
+
+	if strings.Contains(htmlContent, "Just a moment") || strings.Contains(htmlContent, "cf-browser-verification") {
+		return nil, fmt.Errorf("blocked by Cloudflare challenge page")
 	}
 	if strings.Contains(htmlContent, "cfwaitingroom") || strings.Contains(htmlContent, "Waiting Room") {
 		return nil, fmt.Errorf("blocked by Cloudflare Waiting Room")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected HTTP status %d", resp.StatusCode)
 	}
 
 	// Parse trains from HTML
@@ -164,7 +180,6 @@ func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.
 }
 
 // parseHTML extracts train information from the booking.kai.id search results page.
-// (Moved here from bookingkai.go since it's used by the queue worker.)
 func parseHTML(rawHTML string) ([]common.Train, error) {
 	doc, err := html.Parse(strings.NewReader(rawHTML))
 	if err != nil {
@@ -214,9 +229,12 @@ func (q *BrowserQueue) Enqueue(ctx context.Context, searchURL string) ([]common.
 	}
 }
 
-// Close shuts down the queue worker gracefully.
+// Close shuts down the browser and queue worker gracefully.
 func (q *BrowserQueue) Close() {
 	close(q.jobs)
 	<-q.done
+	if q.browser != nil {
+		q.browser.Close()
+	}
 	q.logger.Info("BookingKAI browser queue stopped")
 }

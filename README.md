@@ -46,7 +46,7 @@ brew install cloudflared
 # Pastikan curl_chrome110 ada di PATH
 ```
 
-> **Note:** BookingKAI provider menggunakan uTLS + HTTP/2 untuk bypass Cloudflare, tidak perlu Chrome/browser terpisah.
+> **Note:** BookingKAI provider menggunakan headless Chrome (go-rod) untuk bypass Cloudflare. Chrome/Chromium akan otomatis di-download jika belum ada.
 
 ## Configuration
 
@@ -189,7 +189,7 @@ go run cmd/main.go -c myconfig.yml
 | **tiketkai** | TiketKai.com | AES encrypted |
 | **traveloka** | Traveloka.com | Direct JSON |
 | **tiketcom** | Tiket.com | Butuh curl_chrome110, support proxy |
-| **bookingkai** | booking.kai.id | Official KAI, uTLS+HTTP/2, shared queue (serial), support proxy |
+| **bookingkai** | booking.kai.id | Official KAI, headless Chrome (go-rod), Cloudflare bypass, shared queue (serial), support proxy |
 
 ## Troubleshooting
 
