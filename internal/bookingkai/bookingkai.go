@@ -3,20 +3,15 @@ package bookingkai
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"io"
 	"log/slog"
 	"math/rand"
 	"net"
-	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"strings"
 	"time"
 
 	"golang.org/x/net/html"
-	"golang.org/x/net/http2"
 	"golang.org/x/net/proxy"
 
 	utls "github.com/refraction-networking/utls"
@@ -40,16 +35,16 @@ type Provider struct {
 	TrainName     string        // Optional: specific train to monitor ("any"/"*" = all trains)
 	MaxPrice      int           // Max price filter in IDR (0 = no filter)
 	CheckInterval time.Duration // Polling interval
-	ProxyURL      string        // Optional SOCKS5 proxy
 	Index         int           // Global index (1-based)
 	Notes         string        // Optional user notes
 	history       *history.Store
 	status        *common.StatusTracker
-	client        *http.Client
+	queue         *BrowserQueue
 }
 
-// NewProvider creates a new BookingKAI provider
-func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, proxyURL string, index int, notes string, maxPrice int) *Provider {
+// NewProvider creates a new BookingKAI provider.
+// The queue parameter should be shared across all bookingkai providers.
+func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, queue *BrowserQueue, index int, notes string, maxPrice int) *Provider {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
@@ -61,11 +56,11 @@ func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, inte
 		TrainName:     trainName,
 		MaxPrice:      maxPrice,
 		CheckInterval: interval,
-		ProxyURL:      proxyURL,
 		Index:         index,
 		Notes:         notes,
 		history:       history.NewStore(100),
 		status:        common.NewStatusTracker(),
+		queue:         queue,
 	}
 }
 
@@ -125,65 +120,6 @@ func dialUTLS(ctx context.Context, network, addr, proxyURL string) (net.Conn, er
 	return uconn, nil
 }
 
-// ensureClient lazily initializes the HTTP client using http2.Transport + uTLS.
-// We use http2.Transport directly because booking.kai.id (behind Cloudflare)
-// negotiates HTTP/2 via ALPN, and http.Transport cannot handle HTTP/2 frames
-// when a custom DialTLS is used.
-func (p *Provider) ensureClient() {
-	if p.client != nil {
-		return
-	}
-
-	jar, _ := cookiejar.New(nil)
-	proxyURL := p.ProxyURL
-
-	t2 := &http2.Transport{
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-			return dialUTLS(ctx, network, addr, proxyURL)
-		},
-		// Allow plain HTTP connections through the transport (needed for some redirect chains)
-		AllowHTTP: false,
-	}
-
-	p.client = &http.Client{
-		Transport: t2,
-		Jar:       jar,
-		Timeout:   60 * time.Second,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return fmt.Errorf("too many redirects")
-			}
-			setBrowserHeaders(req, req.URL.String())
-			return nil
-		},
-	}
-
-	p.Logger.Info("BookingKAI HTTP client (uTLS+HTTP2) initialized", "proxy", p.ProxyURL)
-}
-
-// setBrowserHeaders sets browser-like headers on the request, matching
-// the real Chrome request captured in bookingkai.md.
-func setBrowserHeaders(req *http.Request, referer string) {
-	req.Header.Set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-	req.Header.Set("accept-language", "en-US,en;q=0.8")
-	req.Header.Set("cache-control", "no-cache")
-	req.Header.Set("pragma", "no-cache")
-	req.Header.Set("priority", "u=0, i")
-	req.Header.Set("sec-ch-ua", `"Not:A-Brand";v="99", "Brave";v="133", "Chromium";v="133"`)
-	req.Header.Set("sec-ch-ua-mobile", "?0")
-	req.Header.Set("sec-ch-ua-platform", `"Windows"`)
-	req.Header.Set("sec-fetch-dest", "document")
-	req.Header.Set("sec-fetch-mode", "navigate")
-	req.Header.Set("sec-fetch-site", "same-origin")
-	req.Header.Set("sec-fetch-user", "?1")
-	req.Header.Set("sec-gpc", "1")
-	req.Header.Set("upgrade-insecure-requests", "1")
-	req.Header.Set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36")
-	if referer != "" {
-		req.Header.Set("referer", referer)
-	}
-}
-
 // Search performs a search and returns trains matching TrainName
 func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 	allTrains, err := p.fetchTrains(ctx)
@@ -212,10 +148,8 @@ func (p *Provider) SearchAll(ctx context.Context) ([]common.Train, error) {
 	return p.fetchTrains(ctx)
 }
 
-// fetchTrains sends an HTTP request to booking.kai.id and parses the HTML result.
+// fetchTrains builds the search URL and enqueues it to the shared BrowserQueue.
 func (p *Provider) fetchTrains(ctx context.Context) ([]common.Train, error) {
-	p.ensureClient()
-
 	// Format date for URL
 	dateIndo, err := formatDateIndo(p.Date)
 	if err != nil {
@@ -228,79 +162,17 @@ func (p *Provider) fetchTrains(ctx context.Context) ([]common.Train, error) {
 		p.Origin, p.Destination, url.QueryEscape(dateIndo),
 	)
 
-	p.Logger.Debug("Fetching booking.kai.id", "url", searchURL)
+	p.Logger.Debug("Enqueuing booking.kai.id request", "url", searchURL)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+	trains, err := p.queue.Enqueue(ctx, searchURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	setBrowserHeaders(req, "https://booking.kai.id/")
-
-	resp, err := p.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	htmlContent := string(body)
-
-	// Detect Cloudflare challenges
-	if resp.StatusCode == 403 || strings.Contains(htmlContent, "Just a moment") || strings.Contains(htmlContent, "cf-browser-verification") {
-		return nil, fmt.Errorf("blocked by Cloudflare challenge (status %d)", resp.StatusCode)
-	}
-	if strings.Contains(htmlContent, "cf_chl_opt") || strings.Contains(htmlContent, "challenge-platform") {
-		return nil, fmt.Errorf("blocked by Cloudflare JS challenge")
-	}
-	if strings.Contains(htmlContent, "cfwaitingroom") || strings.Contains(htmlContent, "Waiting Room") {
-		return nil, fmt.Errorf("blocked by Cloudflare Waiting Room")
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected HTTP status %d", resp.StatusCode)
-	}
-
-	// Parse trains from HTML
-	trains, err := parseHTML(htmlContent)
-	if err != nil {
-		return nil, fmt.Errorf("HTML parsing failed: %w", err)
+		return nil, err
 	}
 
 	p.Logger.Info("BookingKAI search complete",
 		"route", fmt.Sprintf("%s→%s", p.Origin, p.Destination),
 		"date", p.Date,
 		"total", len(trains))
-
-	return trains, nil
-}
-
-// parseHTML extracts train information from the booking.kai.id search results page
-func parseHTML(rawHTML string) ([]common.Train, error) {
-	doc, err := html.Parse(strings.NewReader(rawHTML))
-	if err != nil {
-		return nil, err
-	}
-
-	var trains []common.Train
-
-	// Find all div.data-block.list-kereta elements
-	var walk func(*html.Node)
-	walk = func(n *html.Node) {
-		if isDataBlock(n) {
-			train := extractTrainFromBlock(n)
-			if train.Name != "" {
-				trains = append(trains, train)
-			}
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
-	}
-	walk(doc)
 
 	return trains, nil
 }

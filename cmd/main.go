@@ -45,10 +45,13 @@ func main() {
 	defer cancel()
 
 	// Initialize and start all train monitors (from flattened config)
-	providers, err := initAllProviders(ctx, logger, cfg)
+	providers, bkQueue, err := initAllProviders(ctx, logger, cfg)
 	if err != nil {
 		logger.Error("Failed to initialize providers", "error", err)
 		os.Exit(1)
+	}
+	if bkQueue != nil {
+		defer bkQueue.Close()
 	}
 
 	if len(providers) == 0 {
@@ -105,13 +108,22 @@ func main() {
 }
 
 // initAllProviders creates providers for each flat train config
-func initAllProviders(ctx context.Context, logger *slog.Logger, cfg *config.Config) ([]common.Provider, error) {
+func initAllProviders(ctx context.Context, logger *slog.Logger, cfg *config.Config) ([]common.Provider, *bookingkai.BrowserQueue, error) {
 	var providers []common.Provider
 
+	// Create a shared BrowserQueue for all bookingkai providers
+	var bkQueue *bookingkai.BrowserQueue
+	for _, flat := range cfg.FlatTrains {
+		if flat.ProviderName == "bookingkai" {
+			bkQueue = bookingkai.NewBrowserQueue(logger, flat.ProxyURL)
+			break
+		}
+	}
+
 	for i, flat := range cfg.FlatTrains {
-		provider, err := initProviderForTrain(ctx, logger, &flat, i+1)
+		provider, err := initProviderForTrain(ctx, logger, &flat, i+1, bkQueue)
 		if err != nil {
-			return nil, fmt.Errorf("train %s (%s): %w", flat.Name, flat.ProviderName, err)
+			return nil, bkQueue, fmt.Errorf("train %s (%s): %w", flat.Name, flat.ProviderName, err)
 		}
 
 		providers = append(providers, provider)
@@ -124,11 +136,11 @@ func initAllProviders(ctx context.Context, logger *slog.Logger, cfg *config.Conf
 		)
 	}
 
-	return providers, nil
+	return providers, bkQueue, nil
 }
 
 // initProviderForTrain creates a provider for a single flat train config
-func initProviderForTrain(ctx context.Context, logger *slog.Logger, flat *config.FlatTrainConfig, index int) (common.Provider, error) {
+func initProviderForTrain(ctx context.Context, logger *slog.Logger, flat *config.FlatTrainConfig, index int, bkQueue *bookingkai.BrowserQueue) (common.Provider, error) {
 	switch flat.ProviderName {
 	case "tiketkai":
 		if err := tiketkai.Init(ctx); err != nil {
@@ -191,7 +203,7 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, flat *config
 			flat.Date,
 			flat.Name,
 			flat.IntervalDuration,
-			flat.ProxyURL,
+			bkQueue,
 			index,
 			flat.Notes,
 			flat.MaxPrice,

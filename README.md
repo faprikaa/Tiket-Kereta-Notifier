@@ -6,7 +6,8 @@ Bot Telegram untuk monitoring ketersediaan tiket kereta api dari TiketKai, Trave
 
 - ✅ **Multi-Train Monitoring** - Monitor banyak kereta sekaligus
 - ✅ **Per-Train Provider** - Setiap kereta bisa pakai provider berbeda
-- ✅ **Per-Train Proxy** - Setiap kereta (tiketcom) bisa pakai proxy berbeda
+- ✅ **Per-Train Proxy** - Setiap kereta (tiketcom/bookingkai) bisa pakai proxy berbeda
+- ✅ **Browser Queue** - BookingKAI requests diproses serial via shared queue (anti rate-limit)
 - ✅ **Wildcard Train Name** - Pakai `"any"` / `"*"` untuk monitor semua kereta di rute
 - ✅ **Filter Harga** - Filter tiket berdasarkan harga maksimal (Rupiah)
 - ✅ **YAML Config** - Konfigurasi mudah via file YAML
@@ -45,11 +46,7 @@ brew install cloudflared
 # Pastikan curl_chrome110 ada di PATH
 ```
 
-**Google Chrome** (untuk BookingKAI provider):
-```bash
-# go-rod akan otomatis download Chromium jika Chrome tidak ditemukan
-# Atau install Chrome/Chromium secara manual
-```
+> **Note:** BookingKAI provider menggunakan uTLS + HTTP/2 untuk bypass Cloudflare, tidak perlu Chrome/browser terpisah.
 
 ## Configuration
 
@@ -192,7 +189,7 @@ go run cmd/main.go -c myconfig.yml
 | **tiketkai** | TiketKai.com | AES encrypted |
 | **traveloka** | Traveloka.com | Direct JSON |
 | **tiketcom** | Tiket.com | Butuh curl_chrome110, support proxy |
-| **bookingkai** | booking.kai.id | Official KAI, butuh Chrome, support proxy |
+| **bookingkai** | booking.kai.id | Official KAI, uTLS+HTTP/2, shared queue (serial), support proxy |
 
 ## Troubleshooting
 
