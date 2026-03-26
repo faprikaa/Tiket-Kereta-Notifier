@@ -45,3 +45,5 @@ curl 'https://booking.kai.id/search?origination=8OCvWHOOxiIMNatBfXybIw%3D%3D&des
 ## Response
 
 ./output.html
+an
+./output2.html

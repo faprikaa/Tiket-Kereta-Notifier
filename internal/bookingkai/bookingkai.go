@@ -352,7 +352,7 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 				}
 				msg += "\n"
 				for _, t := range availableTrains {
-					msg += fmt.Sprintf("• %s [%s]\n  💺 @ %s\n", t.Name, t.Class, t.Price)
+					msg += fmt.Sprintf("• %s [%s]\n  💺 %s seats @ %s\n", t.Name, t.Class, t.SeatsLeft, t.Price)
 				}
 				notifyFunc(msg)
 			}
