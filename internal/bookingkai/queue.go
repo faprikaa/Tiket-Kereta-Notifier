@@ -297,6 +297,7 @@ func (q *BrowserQueue) fetchViaCurl(ctx context.Context, searchURL string) ([]co
 	}
 
 	htmlContent := string(out)
+	fmt.Println("raw html: ", htmlContent)
 
 	// Check for Cloudflare blocks
 	if isCloudflareChallenge(htmlContent) {
