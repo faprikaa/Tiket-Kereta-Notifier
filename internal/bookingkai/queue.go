@@ -43,6 +43,7 @@ type BrowserQueue struct {
 	logger   *slog.Logger
 	proxyURL string
 	browser  *rod.Browser
+	page     *rod.Page // persistent page to retain CF cookies
 	scraper  *cloudscraper.CloudScrapper
 	jobs     chan Job
 	done     chan struct{}
@@ -60,15 +61,21 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 		Set("disable-dev-shm-usage").
 		Set("disable-infobars").
 		Set("window-size", "1920,1080").
-		Set("lang", "id-ID,id,en-US,en")
+		Set("lang", "id-ID,id,en-US,en").
+		Set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
 
 	if proxyURL != "" {
-		chromeProxy := strings.Replace(proxyURL, "socks5h://", "socks5://", 1)
-		l = l.Set("proxy-server", chromeProxy)
-		logger.Info("BookingKAI browser using proxy", "proxy", chromeProxy)
+		// Keep socks5h:// for Chrome — it supports remote DNS resolution via
+		// --host-resolver-rules or the proxy itself. Converting to socks5://
+		// causes DNS to resolve locally, leaking real location to Cloudflare.
+		l = l.Set("proxy-server", proxyURL)
+		// Force all DNS through the proxy to avoid DNS leak
+		l = l.Set("host-resolver-rules", "MAP * ~NOTFOUND , EXCLUDE 127.0.0.1")
+		logger.Info("BookingKAI browser using proxy", "proxy", proxyURL)
 	}
 
 	var browser *rod.Browser
+	var persistentPage *rod.Page
 	controlURL, err := l.Launch()
 	if err != nil {
 		logger.Warn("Failed to launch browser, will use cloudscraper only", "error", err)
@@ -79,6 +86,33 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 			browser = nil
 		} else {
 			browser.IgnoreCertErrors(true)
+
+			// Create a persistent stealth page to retain CF cookies across requests
+			persistentPage, err = stealth.Page(browser)
+			if err != nil {
+				logger.Warn("Failed to create stealth page", "error", err)
+			} else {
+				// Warm up: navigate to homepage to acquire cf_clearance cookie
+				logger.Info("Warming up browser — visiting booking.kai.id homepage...")
+				warmCtx, warmCancel := context.WithTimeout(context.Background(), 60*time.Second)
+				warmPage := persistentPage.Context(warmCtx)
+				if navErr := warmPage.Navigate("https://booking.kai.id/"); navErr != nil {
+					logger.Warn("Warmup navigation failed", "error", navErr)
+				} else {
+					_ = warmPage.WaitLoad()
+					// Wait for Cloudflare challenge to auto-resolve
+					for i := 0; i < 15; i++ {
+						time.Sleep(2 * time.Second)
+						htmlContent, _ := warmPage.HTML()
+						if !isCloudflareChallenge(htmlContent) {
+							logger.Info("✅ Browser warmup complete — CF cookies acquired")
+							break
+						}
+						logger.Debug("Warmup: waiting for CF challenge...", "attempt", i+1)
+					}
+				}
+				warmCancel()
+			}
 		}
 	}
 
@@ -93,6 +127,7 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 		logger:   logger,
 		proxyURL: proxyURL,
 		browser:  browser,
+		page:     persistentPage,
 		scraper:  scraper,
 		jobs:     make(chan Job, 64),
 		done:     make(chan struct{}),
@@ -200,17 +235,17 @@ func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.
 	return nil, fmt.Errorf("both browser and cloudscraper unavailable")
 }
 
-// fetchViaBrowser uses stealth headless Chrome to fetch the page.
+// fetchViaBrowser uses the persistent stealth Chrome page to fetch the page.
+// Reusing the same page retains Cloudflare cookies (cf_clearance, __cf_bm, etc.)
+// across requests, which is critical for not getting re-challenged.
 func (q *BrowserQueue) fetchViaBrowser(ctx context.Context, searchURL string) ([]common.Train, error) {
-	q.logger.Debug("Browser navigating (stealth)", "url", searchURL)
+	q.logger.Debug("Browser navigating (stealth, persistent page)", "url", searchURL)
 
-	page, err := stealth.Page(q.browser)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create stealth page: %w", err)
+	if q.page == nil {
+		return nil, fmt.Errorf("no persistent browser page available")
 	}
-	defer page.Close()
 
-	page = page.Context(ctx).Timeout(90 * time.Second)
+	page := q.page.Context(ctx).Timeout(90 * time.Second)
 
 	if err := page.Navigate(searchURL); err != nil {
 		return nil, fmt.Errorf("navigation failed: %w", err)
@@ -220,7 +255,7 @@ func (q *BrowserQueue) fetchViaBrowser(ctx context.Context, searchURL string) ([
 		return nil, fmt.Errorf("page load failed: %w", err)
 	}
 
-	if err := page.WaitStable(1 * time.Second); err != nil {
+	if err := page.WaitStable(2 * time.Second); err != nil {
 		q.logger.Debug("WaitStable timeout, continuing with current page state")
 	}
 
@@ -233,7 +268,7 @@ func (q *BrowserQueue) fetchViaBrowser(ctx context.Context, searchURL string) ([
 	if isCloudflareChallenge(htmlContent) {
 		q.logger.Info("Cloudflare challenge detected, waiting for auto-resolve...")
 
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 15; i++ {
 			time.Sleep(3 * time.Second)
 
 			htmlContent, err = page.HTML()
@@ -249,12 +284,28 @@ func (q *BrowserQueue) fetchViaBrowser(ctx context.Context, searchURL string) ([
 		}
 
 		if isCloudflareChallenge(htmlContent) {
-			return nil, fmt.Errorf("blocked by Cloudflare challenge (timeout after 30s)")
+			return nil, fmt.Errorf("blocked by Cloudflare challenge (timeout after 45s)")
 		}
 	}
 
 	if strings.Contains(htmlContent, "cfwaitingroom") || strings.Contains(htmlContent, "Waiting Room") {
-		return nil, fmt.Errorf("blocked by Cloudflare Waiting Room")
+		// Wait for the waiting room to clear
+		q.logger.Info("Cloudflare Waiting Room detected, waiting...")
+		for i := 0; i < 20; i++ {
+			time.Sleep(3 * time.Second)
+			htmlContent, err = page.HTML()
+			if err != nil {
+				break
+			}
+			if !strings.Contains(htmlContent, "cfwaitingroom") && !strings.Contains(htmlContent, "Waiting Room") {
+				q.logger.Info("Waiting Room cleared!")
+				break
+			}
+			q.logger.Debug("Still in Waiting Room...", "attempt", i+1)
+		}
+		if strings.Contains(htmlContent, "cfwaitingroom") || strings.Contains(htmlContent, "Waiting Room") {
+			return nil, fmt.Errorf("blocked by Cloudflare Waiting Room (timeout)")
+		}
 	}
 
 	trains, err := parseHTML(htmlContent)
@@ -275,7 +326,7 @@ func (q *BrowserQueue) fetchViaCloudscraper(searchURL string) ([]common.Train, e
 			"accept-language":           "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
 			"cache-control":             "no-cache",
 			"pragma":                    "no-cache",
-			"sec-ch-ua":                 `"Not:A-Brand";v="99", "Brave";v="133", "Chromium";v="133"`,
+			"sec-ch-ua":                 `"Not:A-Brand";v="99", "Chromium";v="137", "Google Chrome";v="137"`,
 			"sec-ch-ua-mobile":          "?0",
 			"sec-ch-ua-platform":        `"Windows"`,
 			"sec-fetch-dest":            "document",
@@ -285,6 +336,7 @@ func (q *BrowserQueue) fetchViaCloudscraper(searchURL string) ([]common.Train, e
 			"sec-gpc":                   "1",
 			"upgrade-insecure-requests": "1",
 			"referer":                   "https://booking.kai.id/",
+			"user-agent":                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
 		},
 		Timeout: 60,
 	}
@@ -380,6 +432,9 @@ func (q *BrowserQueue) Enqueue(ctx context.Context, searchURL string) ([]common.
 func (q *BrowserQueue) Close() {
 	close(q.jobs)
 	<-q.done
+	if q.page != nil {
+		q.page.Close()
+	}
 	if q.browser != nil {
 		q.browser.Close()
 	}
