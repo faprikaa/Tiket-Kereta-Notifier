@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 	"github.com/go-rod/stealth"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/proxy"
 
 	"tiket-kereta-notifier/internal/common"
 )
@@ -214,24 +217,205 @@ func (q *BrowserQueue) worker() {
 	}
 }
 
-// doFetch tries the stealth browser first, and falls back to cloudscraper
-// if Cloudflare blocks the browser.
+// doFetch tries multiple methods in order:
+// 1. Plain HTTP request (fastest, lightweight)
+// 2. Cloudscraper (JA3 spoofing)
+// 3. Curl with impersonated TLS fingerprint
+// 4. Stealth browser (last resort, heaviest)
 func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.Train, error) {
-	// Try browser first
-	if q.browser != nil {
-		trains, err := q.fetchViaBrowser(ctx, searchURL)
+	var lastErr error
+
+	// 1. Try plain HTTP request with proxy
+	trains, err := q.fetchViaHTTP(ctx, searchURL)
+	if err == nil {
+		return trains, nil
+	}
+	q.logger.Warn("HTTP fetch failed", "error", err)
+	lastErr = err
+
+	// 2. Cloudscraper (JA3 spoofing)
+	if q.scraper != nil {
+		trains, err = q.fetchViaCloudscraper(searchURL)
 		if err == nil {
 			return trains, nil
 		}
-		q.logger.Warn("Browser fetch failed, trying cloudscraper fallback", "error", err)
+		q.logger.Warn("Cloudscraper fetch failed", "error", err)
+		lastErr = err
 	}
 
-	// Fallback: cloudscraper (JA3 spoofing)
-	if q.scraper != nil {
-		return q.fetchViaCloudscraper(searchURL)
+	// 3. Curl (impersonated TLS fingerprint)
+	trains, err = q.fetchViaCurl(ctx, searchURL)
+	if err == nil {
+		return trains, nil
+	}
+	q.logger.Warn("Curl fetch failed", "error", err)
+	lastErr = err
+
+	// 4. Last resort: stealth browser
+	if q.browser != nil {
+		trains, err = q.fetchViaBrowser(ctx, searchURL)
+		if err == nil {
+			return trains, nil
+		}
+		q.logger.Warn("Browser fetch failed", "error", err)
+		lastErr = err
 	}
 
-	return nil, fmt.Errorf("both browser and cloudscraper unavailable")
+	return nil, fmt.Errorf("all fetch methods failed, last error: %w", lastErr)
+}
+
+// fetchViaCurl uses curl_chrome116 to fetch the page with a real TLS fingerprint.
+// This is the fastest and most reliable method for bypassing Cloudflare.
+func (q *BrowserQueue) fetchViaCurl(ctx context.Context, searchURL string) ([]common.Train, error) {
+	q.logger.Debug("Curl fetching", "url", searchURL)
+
+	args := []string{
+		"-s",  // Silent
+		"-L",  // Follow redirects
+		"-m", "60", // Timeout 60s
+	}
+
+	// Add proxy if configured
+	if q.proxyURL != "" {
+		args = append(args, "-x", q.proxyURL)
+	}
+
+	args = append(args,
+		"-H", "accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+		"-H", "accept-language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+		"-H", "cache-control: no-cache",
+		"-H", "pragma: no-cache",
+		"-H", "sec-fetch-dest: document",
+		"-H", "sec-fetch-mode: navigate",
+		"-H", "sec-fetch-site: none",
+		"-H", "sec-fetch-user: ?1",
+		"-H", "upgrade-insecure-requests: 1",
+		"-H", "user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+		searchURL,
+	)
+
+	// Try curl_chrome116 first, fall back to regular curl
+	curlBin := "curl_chrome116"
+	if _, err := exec.LookPath(curlBin); err != nil {
+		curlBin = "curl"
+	}
+
+	cmd := exec.CommandContext(ctx, curlBin, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%s execution failed: %w (output: %s)", curlBin, err, truncate(string(out), 200))
+	}
+
+	htmlContent := string(out)
+
+	// Check for Cloudflare blocks
+	if isCloudflareChallenge(htmlContent) {
+		return nil, fmt.Errorf("%s blocked by Cloudflare challenge", curlBin)
+	}
+	if strings.Contains(htmlContent, "cfwaitingroom") || strings.Contains(htmlContent, "Waiting Room") {
+		return nil, fmt.Errorf("%s blocked by Cloudflare Waiting Room", curlBin)
+	}
+
+	trains, err := parseHTML(htmlContent)
+	if err != nil {
+		return nil, fmt.Errorf("HTML parsing failed: %w", err)
+	}
+
+	q.logger.Info("Curl fetch successful", "trains", len(trains), "binary", curlBin)
+	return trains, nil
+}
+
+// truncate limits string length for log output
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// fetchViaHTTP uses Go's native http.Client with optional SOCKS5/HTTP proxy.
+// Similar approach to traveloka.go's createHTTPClient.
+func (q *BrowserQueue) fetchViaHTTP(ctx context.Context, searchURL string) ([]common.Train, error) {
+	q.logger.Debug("HTTP client fetching", "url", searchURL)
+
+	transport := &http.Transport{}
+
+	if q.proxyURL != "" {
+		parsedURL, err := url.Parse(q.proxyURL)
+		if err != nil {
+			return nil, fmt.Errorf("invalid proxy URL: %w", err)
+		}
+
+		if strings.HasPrefix(parsedURL.Scheme, "socks5") {
+			// SOCKS5 proxy via golang.org/x/net/proxy
+			dialer, err := proxy.FromURL(parsedURL, proxy.Direct)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
+			}
+			if cd, ok := dialer.(proxy.ContextDialer); ok {
+				transport.DialContext = cd.DialContext
+			} else {
+				transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+					return dialer.Dial(network, addr)
+				}
+			}
+		} else {
+			// HTTP/HTTPS proxy
+			transport.Proxy = http.ProxyURL(parsedURL)
+		}
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   60 * time.Second,
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7")
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Pragma", "no-cache")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	htmlContent := string(body)
+
+	if resp.StatusCode == 403 || isCloudflareChallenge(htmlContent) {
+		return nil, fmt.Errorf("HTTP blocked by Cloudflare (status %d)", resp.StatusCode)
+	}
+	if strings.Contains(htmlContent, "cfwaitingroom") || strings.Contains(htmlContent, "Waiting Room") {
+		return nil, fmt.Errorf("HTTP blocked by Cloudflare Waiting Room")
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("HTTP unexpected status %d", resp.StatusCode)
+	}
+
+	trains, err := parseHTML(htmlContent)
+	if err != nil {
+		return nil, fmt.Errorf("HTML parsing failed: %w", err)
+	}
+
+	q.logger.Info("HTTP fetch successful", "trains", len(trains))
+	return trains, nil
 }
 
 // fetchViaBrowser uses the persistent stealth Chrome page to fetch the page.
