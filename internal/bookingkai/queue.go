@@ -4,7 +4,10 @@ package bookingkai
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -99,7 +102,73 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 		"browser", browser != nil,
 		"cloudscraper", scraper != nil,
 		"proxy", proxyURL)
+
+	// Verify proxy IP if proxy is configured
+	if proxyURL != "" {
+		checkProxyIP(logger, proxyURL)
+	}
+
 	return q
+}
+
+// checkProxyIP verifies the proxy is working by fetching the public IP
+// from ifconfig.me through both direct and proxied connections for comparison.
+func checkProxyIP(logger *slog.Logger, proxyURL string) {
+	const ipCheckURL = "https://ifconfig.me/ip"
+	httpTimeout := 15 * time.Second
+
+	// 1. Get direct IP (no proxy)
+	directClient := &http.Client{Timeout: httpTimeout}
+	directIP := fetchIP(directClient, ipCheckURL)
+
+	// 2. Get proxied IP
+	proxyParsed, err := url.Parse(proxyURL)
+	if err != nil {
+		logger.Warn("Failed to parse proxy URL for IP check", "proxy", proxyURL, "error", err)
+		return
+	}
+
+	proxyTransport := &http.Transport{
+		Proxy: http.ProxyURL(proxyParsed),
+	}
+	proxyClient := &http.Client{
+		Timeout:   httpTimeout,
+		Transport: proxyTransport,
+	}
+	proxyIP := fetchIP(proxyClient, ipCheckURL)
+
+	if directIP != "" && proxyIP != "" {
+		if directIP == proxyIP {
+			logger.Warn("⚠️ Proxy IP same as direct IP! Proxy may not be working",
+				"direct_ip", directIP, "proxy_ip", proxyIP, "proxy", proxyURL)
+		} else {
+			logger.Info("✅ Proxy IP verified",
+				"direct_ip", directIP, "proxy_ip", proxyIP, "proxy", proxyURL)
+		}
+	} else if proxyIP != "" {
+		logger.Info("✅ Proxy IP check OK", "proxy_ip", proxyIP, "proxy", proxyURL)
+	} else if directIP != "" {
+		logger.Warn("⚠️ Failed to get IP via proxy, proxy may be down",
+			"direct_ip", directIP, "proxy", proxyURL)
+	} else {
+		logger.Warn("⚠️ Could not check IP (both direct and proxy failed)")
+	}
+}
+
+// fetchIP fetches the public IP from the given URL using the provided HTTP client.
+// Returns the IP string or empty string on error.
+func fetchIP(client *http.Client, checkURL string) string {
+	resp, err := client.Get(checkURL)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 256))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(body))
 }
 
 // worker processes jobs one at a time from the queue channel.
