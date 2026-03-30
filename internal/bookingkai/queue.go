@@ -270,8 +270,8 @@ func (q *BrowserQueue) fetchViaCurl(ctx context.Context, searchURL string) ([]co
 	q.logger.Debug("Curl fetching", "url", searchURL)
 
 	args := []string{
-		"-s",  // Silent
-		"-L",  // Follow redirects
+		"-s",       // Silent
+		"-L",       // Follow redirects
 		"-m", "60", // Timeout 60s
 	}
 
@@ -281,21 +281,11 @@ func (q *BrowserQueue) fetchViaCurl(ctx context.Context, searchURL string) ([]co
 	}
 
 	args = append(args,
-		"-H", "accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-		"-H", "accept-language: id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-		"-H", "cache-control: no-cache",
-		"-H", "pragma: no-cache",
-		"-H", "sec-fetch-dest: document",
-		"-H", "sec-fetch-mode: navigate",
-		"-H", "sec-fetch-site: none",
-		"-H", "sec-fetch-user: ?1",
-		"-H", "upgrade-insecure-requests: 1",
-		"-H", "user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
 		searchURL,
 	)
 
 	// Try curl_chrome116 first, fall back to regular curl
-	curlBin := "curl_chrome116"
+	curlBin := "curl"
 	if _, err := exec.LookPath(curlBin); err != nil {
 		curlBin = "curl"
 	}
