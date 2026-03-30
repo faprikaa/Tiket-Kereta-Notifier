@@ -320,24 +320,24 @@ func (q *BrowserQueue) fetchViaCloudscraper(searchURL string) ([]common.Train, e
 	q.logger.Debug("Cloudscraper fetching", "url", searchURL)
 
 	opts := cycletls.Options{
-		Headers: map[string]string{
-			"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-			"accept-language":           "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
-			"cache-control":             "no-cache",
-			"pragma":                    "no-cache",
-			"sec-ch-ua":                 `"Not:A-Brand";v="99", "Chromium";v="137", "Google Chrome";v="137"`,
-			"sec-ch-ua-mobile":          "?0",
-			"sec-ch-ua-platform":        `"Windows"`,
-			"sec-fetch-dest":            "document",
-			"sec-fetch-mode":            "navigate",
-			"sec-fetch-site":            "same-origin",
-			"sec-fetch-user":            "?1",
-			"sec-gpc":                   "1",
-			"upgrade-insecure-requests": "1",
-			"referer":                   "https://booking.kai.id/",
-			"user-agent":                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-		},
-		Timeout: 60,
+		// Headers: map[string]string{
+		// 	"accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+		// 	"accept-language":           "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+		// 	"cache-control":             "no-cache",
+		// 	"pragma":                    "no-cache",
+		// 	"sec-ch-ua":                 `"Not:A-Brand";v="99", "Chromium";v="137", "Google Chrome";v="137"`,
+		// 	"sec-ch-ua-mobile":          "?0",
+		// 	"sec-ch-ua-platform":        `"Windows"`,
+		// 	"sec-fetch-dest":            "document",
+		// 	"sec-fetch-mode":            "navigate",
+		// 	"sec-fetch-site":            "same-origin",
+		// 	"sec-fetch-user":            "?1",
+		// 	"sec-gpc":                   "1",
+		// 	"upgrade-insecure-requests": "1",
+		// 	"referer":                   "https://booking.kai.id/",
+		// 	"user-agent":                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+		// },
+		// Timeout: 60,
 	}
 
 	if q.proxyURL != "" {
