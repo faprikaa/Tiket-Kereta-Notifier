@@ -65,13 +65,12 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 		Set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
 
 	if proxyURL != "" {
-		// Keep socks5h:// for Chrome — it supports remote DNS resolution via
-		// --host-resolver-rules or the proxy itself. Converting to socks5://
-		// causes DNS to resolve locally, leaking real location to Cloudflare.
-		l = l.Set("proxy-server", proxyURL)
-		// Force all DNS through the proxy to avoid DNS leak
-		l = l.Set("host-resolver-rules", "MAP * ~NOTFOUND , EXCLUDE 127.0.0.1")
-		logger.Info("BookingKAI browser using proxy", "proxy", proxyURL)
+		// Chrome works more reliably with http:// proxy, convert socks5 variants
+		chromeProxy := proxyURL
+		chromeProxy = strings.Replace(chromeProxy, "socks5h://", "http://", 1)
+		chromeProxy = strings.Replace(chromeProxy, "socks5://", "http://", 1)
+		l = l.Set("proxy-server", chromeProxy)
+		logger.Info("BookingKAI browser using proxy", "proxy", chromeProxy)
 	}
 
 	var browser *rod.Browser
