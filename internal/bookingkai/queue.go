@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -57,16 +58,24 @@ type BrowserQueue struct {
 // All bookingkai providers should share the same queue so requests are serialized.
 func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 	// --- 1. Launch stealth browser ---
+	// Use headless=new (Chrome's modern headless mode) which shares the same
+	// rendering pipeline as a real browser and is much harder for Cloudflare to detect.
+	// Avoid --no-sandbox and other flags that are classic headless fingerprints.
 	l := launcher.New().
-		Headless(true).
+		Headless(false). // let us control the headless flag manually below
+		Set("headless", "new").
 		Set("disable-blink-features", "AutomationControlled").
-		Set("disable-gpu").
-		Set("no-sandbox").
-		Set("disable-dev-shm-usage").
-		Set("disable-infobars").
 		Set("window-size", "1920,1080").
 		Set("lang", "id-ID,id,en-US,en").
 		Set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
+
+	// --no-sandbox is required when running as root (e.g. on a VPS).
+	// We add it conditionally to avoid the flag appearing when not needed,
+	// since it is a well-known headless/bot fingerprint.
+	if os.Getuid() == 0 {
+		l = l.Set("no-sandbox")
+		logger.Warn("Running as root — adding --no-sandbox (consider running as non-root to improve Cloudflare bypass)")
+	}
 
 	if proxyURL != "" {
 		// Chrome works more reliably with http:// proxy, convert socks5 variants
