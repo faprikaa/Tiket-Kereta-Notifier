@@ -77,8 +77,8 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 	if os.Getenv("DISPLAY") == "" {
 		// Fallback: set a default display so Chrome doesn't refuse to start.
 		// This assumes Xvfb is already running on :99.
-		os.Setenv("DISPLAY", ":99")
-		logger.Warn("DISPLAY not set — defaulting to :99 (make sure Xvfb is running: Xvfb :99 -screen 0 1920x1080x24 &)")
+		os.Setenv("DISPLAY", ":10")
+		logger.Warn("DISPLAY not set — defaulting to :10")
 	}
 	logger.Info("Launching Chrome without --headless", "display", os.Getenv("DISPLAY"))
 
