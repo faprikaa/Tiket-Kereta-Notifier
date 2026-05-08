@@ -58,23 +58,27 @@ type BrowserQueue struct {
 // All bookingkai providers should share the same queue so requests are serialized.
 func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 	// --- 1. Launch stealth browser ---
-	// Use headless=new (Chrome's modern headless mode) which shares the same
-	// rendering pipeline as a real browser and is much harder for Cloudflare to detect.
-	// Avoid --no-sandbox and other flags that are classic headless fingerprints.
+	// Do NOT use --headless — Cloudflare detects it even with stealth plugins.
+	// Instead, rely on a virtual display (Xvfb) so Chrome thinks it has a real screen.
+	// On the VPS, run: Xvfb :99 -screen 0 1920x1080x24 &
+	// and set DISPLAY=:99 before starting this app.
+	if os.Getenv("DISPLAY") == "" {
+		// Fallback: set a default display so Chrome doesn't refuse to start.
+		// This assumes Xvfb is already running on :99.
+		os.Setenv("DISPLAY", ":99")
+		logger.Warn("DISPLAY not set — defaulting to :99 (make sure Xvfb is running: Xvfb :99 -screen 0 1920x1080x24 &)")
+	}
+	logger.Info("Launching Chrome without --headless", "display", os.Getenv("DISPLAY"))
+
 	l := launcher.New().
-		Headless(false). // let us control the headless flag manually below
-		Set("headless", "new").
+		Headless(false).
 		Set("disable-blink-features", "AutomationControlled").
 		Set("window-size", "1920,1080").
 		Set("lang", "id-ID,id,en-US,en").
 		Set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
 
-	// --no-sandbox is required when running as root (e.g. on a VPS).
-	// We add it conditionally to avoid the flag appearing when not needed,
-	// since it is a well-known headless/bot fingerprint.
 	if os.Getuid() == 0 {
 		l = l.Set("no-sandbox")
-		logger.Warn("Running as root — adding --no-sandbox (consider running as non-root to improve Cloudflare bypass)")
 	}
 
 	if proxyURL != "" {
