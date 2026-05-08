@@ -80,19 +80,19 @@ type WebhookConfig struct {
 	Port    int  `yaml:"port"`
 }
 
-// BookingKAIConfig holds settings specific to the bookingkai browser automation
-type BookingKAIConfig struct {
-	Display        string `yaml:"display"`         // X display, e.g. ":10" (default: ":10")
-	XAuthority     string `yaml:"xauthority"`      // Path to Xauthority file (auto-detected if empty)
-	ChromiumPath   string `yaml:"chromium_path"`   // Path to chromium binary (auto-detected if empty)
+// BrowserConfig holds browser automation settings (used by bookingkai and future providers)
+type BrowserConfig struct {
+	Display      string `yaml:"display"`        // X display, e.g. ":10" (default: ":10")
+	XAuthority   string `yaml:"xauthority"`     // Path to Xauthority file (auto-detected if empty)
+	ChromiumPath string `yaml:"chromium_path"`  // Path to chromium binary (auto-detected if empty)
 }
 
 // Config represents the full application configuration
 type Config struct {
-	Telegram   TelegramConfig   `yaml:"telegram"`
-	Webhook    WebhookConfig    `yaml:"webhook"`
-	BookingKAI BookingKAIConfig `yaml:"bookingkai"`
-	Trains     []TrainConfig    `yaml:"trains"`
+	Telegram TelegramConfig `yaml:"telegram"`
+	Webhook  WebhookConfig  `yaml:"webhook"`
+	Browser  BrowserConfig  `yaml:"browser"`
+	Trains   []TrainConfig  `yaml:"trains"`
 
 	// FlatTrains is the flattened list: one entry per train × provider
 	FlatTrains []FlatTrainConfig `yaml:"-"`
@@ -169,9 +169,9 @@ func (c *Config) processTrainConfigs() {
 		c.Webhook.Port = 8080
 	}
 
-	// Set default bookingkai display
-	if c.BookingKAI.Display == "" {
-		c.BookingKAI.Display = ":10"
+	// Set default browser display
+	if c.Browser.Display == "" {
+		c.Browser.Display = ":10"
 	}
 }
 

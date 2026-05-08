@@ -10,11 +10,11 @@ webhook:
   enabled: true
   port: 8080
 
-# Konfigurasi browser untuk provider bookingkai
+# Konfigurasi browser (digunakan oleh provider bookingkai)
 # Browser dijalankan tanpa --headless agar tidak terdeteksi Cloudflare
-bookingkai:
-  display: ":10"                        # X display (default: ":10", sesuaikan dengan RDP session kamu)
-  xauthority: "/root/.Xauthority"       # Path Xauthority (opsional, dicari otomatis jika kosong)
+browser:
+  display: ":10"                              # X display (default: ":10", sesuaikan dengan display RDP kamu)
+  xauthority: "/root/.Xauthority"             # Path Xauthority (opsional, dicari otomatis jika kosong)
   chromium_path: "/usr/bin/chromium-browser"  # Path binary chromium (opsional, dicari otomatis jika kosong)
 
 trains:
