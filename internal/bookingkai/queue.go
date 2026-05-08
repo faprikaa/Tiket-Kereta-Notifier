@@ -68,23 +68,42 @@ func (q *BrowserQueue) notify(msg string) {
 
 // NewBrowserQueue creates a shared browser queue with stealth browser + cloudscraper fallback.
 // All bookingkai providers should share the same queue so requests are serialized.
-func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
+// display: X display to use (e.g. ":10"). xauthority: path to Xauthority file (optional).
+func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiumPath string) *BrowserQueue {
 	// --- 1. Launch stealth browser ---
 	// Do NOT use --headless — Cloudflare detects it even with stealth plugins.
-	// Instead, rely on a virtual display (Xvfb) so Chrome thinks it has a real screen.
-	// On the VPS, run: Xvfb :99 -screen 0 1920x1080x24 &
-	// and set DISPLAY=:99 before starting this app.
-	if os.Getenv("DISPLAY") == "" {
-		// Fallback: set a default display so Chrome doesn't refuse to start.
-		// This assumes Xvfb is already running on :99.
-		os.Setenv("DISPLAY", ":10")
-		logger.Warn("DISPLAY not set — defaulting to :10")
+	// Use the configured X display so Chrome renders on a real/virtual screen.
+	if display == "" {
+		display = ":10"
 	}
-	logger.Info("Launching Chrome without --headless", "display", os.Getenv("DISPLAY"))
+	os.Setenv("DISPLAY", display)
 
-	// Use the system chromium-browser binary (same one the user runs manually).
-	// This shares the same fingerprint/version that Cloudflare already knows.
-	chromiumBin := findChromiumBin()
+	if xauthority != "" {
+		os.Setenv("XAUTHORITY", xauthority)
+	} else if os.Getenv("XAUTHORITY") == "" {
+		// Try common locations automatically
+		candidates := []string{
+			"/root/.Xauthority",
+			os.Getenv("HOME") + "/.Xauthority",
+		}
+		for _, p := range candidates {
+			if _, err := os.Stat(p); err == nil {
+				os.Setenv("XAUTHORITY", p)
+				xauthority = p
+				break
+			}
+		}
+	}
+
+	logger.Info("Launching Chrome without --headless",
+		"display", display,
+		"xauthority", os.Getenv("XAUTHORITY"))
+
+	// Use configured chromium path, or auto-detect from common locations.
+	chromiumBin := chromiumPath
+	if chromiumBin == "" {
+		chromiumBin = findChromiumBin()
+	}
 	logger.Info("Using chromium binary", "path", chromiumBin)
 
 	// Use a dedicated profile dir for the app — avoids SingletonLock conflict
