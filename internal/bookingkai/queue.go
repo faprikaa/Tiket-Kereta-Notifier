@@ -36,6 +36,7 @@ type Job struct {
 type JobResult struct {
 	Trains []common.Train
 	Err    error
+	Method string
 }
 
 // BrowserQueue serializes all browser requests to booking.kai.id through a
@@ -212,8 +213,8 @@ func fetchIP(client *http.Client, checkURL string) string {
 func (q *BrowserQueue) worker() {
 	defer close(q.done)
 	for job := range q.jobs {
-		trains, err := q.doFetch(job.Ctx, job.SearchURL)
-		job.Result <- JobResult{Trains: trains, Err: err}
+		trains, method, err := q.doFetch(job.Ctx, job.SearchURL)
+		job.Result <- JobResult{Trains: trains, Err: err, Method: method}
 	}
 }
 
@@ -222,13 +223,14 @@ func (q *BrowserQueue) worker() {
 // 2. Cloudscraper (JA3 spoofing)
 // 3. Curl with impersonated TLS fingerprint
 // 4. Stealth browser (last resort, heaviest)
-func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.Train, error) {
+// Returns trains, the method that succeeded, and any error.
+func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.Train, string, error) {
 	var lastErr error
 
 	// 1. Try plain HTTP request with proxy
 	trains, err := q.fetchViaHTTP(ctx, searchURL)
 	if err == nil {
-		return trains, nil
+		return trains, "http", nil
 	}
 	q.logger.Warn("HTTP fetch failed", "error", err)
 	lastErr = err
@@ -237,7 +239,7 @@ func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.
 	if q.scraper != nil {
 		trains, err = q.fetchViaCloudscraper(searchURL)
 		if err == nil {
-			return trains, nil
+			return trains, "cloudscraper", nil
 		}
 		q.logger.Warn("Cloudscraper fetch failed", "error", err)
 		lastErr = err
@@ -246,7 +248,7 @@ func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.
 	// 3. Curl (impersonated TLS fingerprint)
 	trains, err = q.fetchViaCurl(ctx, searchURL)
 	if err == nil {
-		return trains, nil
+		return trains, "curl", nil
 	}
 	q.logger.Warn("Curl fetch failed", "error", err)
 	lastErr = err
@@ -255,13 +257,13 @@ func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.
 	if q.browser != nil {
 		trains, err = q.fetchViaBrowser(ctx, searchURL)
 		if err == nil {
-			return trains, nil
+			return trains, "browser", nil
 		}
 		q.logger.Warn("Browser fetch failed", "error", err)
 		lastErr = err
 	}
 
-	return nil, fmt.Errorf("all fetch methods failed, last error: %w", lastErr)
+	return nil, "", fmt.Errorf("all fetch methods failed, last error: %w", lastErr)
 }
 
 // fetchViaCurl uses curl_chrome116 to fetch the page with a real TLS fingerprint.
@@ -580,7 +582,8 @@ func parseHTML(rawHTML string) ([]common.Train, error) {
 
 // Enqueue submits a search URL to the queue and blocks until the result is
 // available. This is the main entry point for providers.
-func (q *BrowserQueue) Enqueue(ctx context.Context, searchURL string) ([]common.Train, error) {
+// Returns trains, the fetch method that succeeded, and any error.
+func (q *BrowserQueue) Enqueue(ctx context.Context, searchURL string) ([]common.Train, string, error) {
 	resultCh := make(chan JobResult, 1)
 	job := Job{
 		Ctx:       ctx,
@@ -591,14 +594,14 @@ func (q *BrowserQueue) Enqueue(ctx context.Context, searchURL string) ([]common.
 	select {
 	case q.jobs <- job:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, "", ctx.Err()
 	}
 
 	select {
 	case res := <-resultCh:
-		return res.Trains, res.Err
+		return res.Trains, res.Method, res.Err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, "", ctx.Err()
 	}
 }
 

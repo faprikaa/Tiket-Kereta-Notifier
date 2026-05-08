@@ -327,12 +327,16 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 
 		for i, r := range results {
 			timestamp := r.Timestamp.Format("02 Jan 15:04")
+			method := ""
+			if r.Method != "" {
+				method = " [" + r.Method + "]"
+			}
 			if r.Error != "" {
-				sb.WriteString(fmt.Sprintf("%d. ❌ [%s] Error\n", i+1, timestamp))
+				sb.WriteString(fmt.Sprintf("%d. ❌ [%s] Error: %s\n", i+1, timestamp, r.Error))
 			} else if len(r.AvailableTrains) > 0 {
-				sb.WriteString(fmt.Sprintf("%d. ✅ [%s] %d available\n", i+1, timestamp, len(r.AvailableTrains)))
+				sb.WriteString(fmt.Sprintf("%d. ✅ [%s] %d available%s\n", i+1, timestamp, len(r.AvailableTrains), method))
 			} else {
-				sb.WriteString(fmt.Sprintf("%d. ⛔ [%s] No seats\n", i+1, timestamp))
+				sb.WriteString(fmt.Sprintf("%d. ⛔ [%s] No seats%s\n", i+1, timestamp, method))
 			}
 		}
 
@@ -438,7 +442,7 @@ func showTrainStatus(chatID string, provider common.Provider, flat config.FlatTr
 	if !status.LastCheckTime.IsZero() {
 		lastCheck = formatDuration(time.Since(status.LastCheckTime)) + " ago"
 		if status.LastCheckError != "" {
-			lastResult = "❌ Error"
+			lastResult = "❌ Error: " + status.LastCheckError
 		} else if status.LastCheckFound {
 			lastResult = "✅ Found seats!"
 		} else {

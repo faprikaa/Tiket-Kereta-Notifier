@@ -36,6 +36,7 @@ type Provider struct {
 	history       *history.Store
 	status        *common.StatusTracker
 	queue         *BrowserQueue
+	lastErrNotify time.Time // rate-limit error notifications
 }
 
 // NewProvider creates a new BookingKAI provider.
@@ -79,14 +80,20 @@ func formatDateIndo(date string) (string, error) {
 
 // Search performs a search and returns trains matching TrainName
 func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
-	allTrains, err := p.fetchTrains(ctx)
+	trains, _, err := p.searchWithMethod(ctx)
+	return trains, err
+}
+
+// searchWithMethod is like Search but also returns the fetch method used.
+func (p *Provider) searchWithMethod(ctx context.Context) ([]common.Train, string, error) {
+	allTrains, method, err := p.fetchTrains(ctx)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// Wildcard "any"/"*" or empty = return all trains
 	if p.TrainName == "" || common.IsWildcard(p.TrainName) {
-		return allTrains, nil
+		return allTrains, method, nil
 	}
 
 	// Filter by train name
@@ -97,20 +104,21 @@ func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
 			filtered = append(filtered, t)
 		}
 	}
-	return filtered, nil
+	return filtered, method, nil
 }
 
 // SearchAll returns all trains on the route without filtering
 func (p *Provider) SearchAll(ctx context.Context) ([]common.Train, error) {
-	return p.fetchTrains(ctx)
+	trains, _, err := p.fetchTrains(ctx)
+	return trains, err
 }
 
 // fetchTrains builds the search URL and enqueues it to the shared BrowserQueue.
-func (p *Provider) fetchTrains(ctx context.Context) ([]common.Train, error) {
+func (p *Provider) fetchTrains(ctx context.Context) ([]common.Train, string, error) {
 	// Format date for URL
 	dateIndo, err := formatDateIndo(p.Date)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// Build search URL
@@ -121,17 +129,18 @@ func (p *Provider) fetchTrains(ctx context.Context) ([]common.Train, error) {
 
 	p.Logger.Debug("Enqueuing booking.kai.id request", "url", searchURL)
 
-	trains, err := p.queue.Enqueue(ctx, searchURL)
+	trains, method, err := p.queue.Enqueue(ctx, searchURL)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	p.Logger.Info("BookingKAI search complete",
 		"route", fmt.Sprintf("%s→%s", p.Origin, p.Destination),
 		"date", p.Date,
-		"total", len(trains))
+		"total", len(trains),
+		"method", method)
 
-	return trains, nil
+	return trains, method, nil
 }
 
 // isDataBlock checks if node is a div with classes "data-block list-kereta"
@@ -304,7 +313,7 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 			p.status.RecordCheckStart()
 
 			p.Logger.Debug("Scheduler checking BookingKAI...")
-			trains, err := p.Search(ctx)
+			trains, method, err := p.searchWithMethod(ctx)
 			if err != nil {
 				p.Logger.Error("Poll failed",
 					"provider", "BookingKAI",
@@ -318,6 +327,14 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 					Timestamp: time.Now(),
 					Error:     err.Error(),
 				})
+				// Notify Telegram for Cloudflare blocks, max once per 15 minutes
+				if strings.Contains(err.Error(), "Cloudflare") && time.Since(p.lastErrNotify) > 15*time.Minute {
+					p.lastErrNotify = time.Now()
+					notifyFunc(fmt.Sprintf(
+						"⚠️ #%d %s\n📍 %s→%s [%s]\n🚫 Gagal bypass Cloudflare — semua metode diblokir\n📋 %s",
+						p.Index, p.TrainName, p.Origin, p.Destination, p.Date, err.Error(),
+					))
+				}
 				continue
 			}
 
@@ -342,6 +359,7 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 				Timestamp:       time.Now(),
 				TrainsFound:     len(trains),
 				AvailableTrains: availableTrains,
+				Method:          method,
 			})
 
 			if len(availableTrains) > 0 {

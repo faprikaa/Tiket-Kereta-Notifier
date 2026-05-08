@@ -23,6 +23,7 @@ type CheckResult struct {
 	TrainsFound     int
 	AvailableTrains []Train
 	Error           string
+	Method          string // fetch method used (e.g. "http", "cloudscraper", "curl", "browser")
 }
 
 // ProviderStatus contains status information for a provider
