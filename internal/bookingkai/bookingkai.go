@@ -297,6 +297,10 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 	timer := time.NewTimer(jitteredInterval())
 	defer timer.Stop()
 
+	// Register notifyFunc to the shared queue so it can send Telegram alerts
+	// (e.g. when a Cloudflare challenge needs manual solving).
+	p.queue.SetNotifyFunc(notifyFunc)
+
 	p.Logger.Info("BookingKAI scheduler started", "interval", interval, "target", p.TrainName)
 
 	for {

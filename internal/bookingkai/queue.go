@@ -45,13 +45,25 @@ type JobResult struct {
 // (go-rod + stealth), and falls back to cloudscraper (JA3 spoofing) if
 // Cloudflare still blocks.
 type BrowserQueue struct {
-	logger   *slog.Logger
-	proxyURL string
-	browser  *rod.Browser
-	page     *rod.Page // persistent page to retain CF cookies
-	scraper  *cloudscraper.CloudScrapper
-	jobs     chan Job
-	done     chan struct{}
+	logger     *slog.Logger
+	proxyURL   string
+	browser    *rod.Browser
+	page       *rod.Page // persistent page to retain CF cookies
+	scraper    *cloudscraper.CloudScrapper
+	jobs       chan Job
+	done       chan struct{}
+	notifyFunc func(string) // optional: send Telegram notification
+}
+
+// SetNotifyFunc sets the Telegram notification callback.
+func (q *BrowserQueue) SetNotifyFunc(fn func(string)) {
+	q.notifyFunc = fn
+}
+
+func (q *BrowserQueue) notify(msg string) {
+	if q.notifyFunc != nil {
+		q.notifyFunc(msg)
+	}
 }
 
 // NewBrowserQueue creates a shared browser queue with stealth browser + cloudscraper fallback.
@@ -75,10 +87,9 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 	chromiumBin := findChromiumBin()
 	logger.Info("Using chromium binary", "path", chromiumBin)
 
-	// Point to the system profile so cf_clearance cookies from manual browsing
-	// are reused automatically. The user can open chromium-browser manually,
-	// solve the CF challenge once, and the app will inherit those cookies.
-	profileDir := "/root/.config/chromium"
+	// Use a dedicated profile dir for the app — avoids SingletonLock conflict
+	// with any manually opened Chromium window.
+	profileDir := "/root/.config/chromium-kai-notifier"
 	logger.Info("Using chromium profile", "dir", profileDir)
 
 	l := launcher.New().
@@ -481,11 +492,13 @@ func (q *BrowserQueue) fetchViaBrowser(ctx context.Context, searchURL string) ([
 		return nil, fmt.Errorf("failed to get page HTML: %w", err)
 	}
 
-	// Check for Cloudflare challenge — wait for auto-resolve
+	// Check for Cloudflare challenge — wait up to 5 minutes for manual solve
 	if isCloudflareChallenge(htmlContent) {
-		q.logger.Info("Cloudflare challenge detected, waiting for auto-resolve...")
+		q.logger.Warn("Cloudflare challenge detected — waiting up to 5 minutes for manual solve",
+			"instruction", "open chromium-browser --user-data-dir=/root/.config/chromium-kai-notifier --no-sandbox on your RDP session and solve the challenge")
+		q.notify("🔐 *Cloudflare Challenge* terdeteksi di booking.kai.id\n\nSelesaikan manual di browser VPS:\n```\nchromium-browser --user-data-dir=/root/.config/chromium-kai-notifier --no-sandbox\n```\nApp akan otomatis lanjut setelah solved (max 5 menit)")
 
-		for i := 0; i < 15; i++ {
+		for i := 0; i < 100; i++ {
 			time.Sleep(3 * time.Second)
 
 			htmlContent, err = page.HTML()
@@ -495,13 +508,16 @@ func (q *BrowserQueue) fetchViaBrowser(ctx context.Context, searchURL string) ([
 
 			if !isCloudflareChallenge(htmlContent) {
 				q.logger.Info("Cloudflare challenge resolved!")
+				q.notify("✅ Cloudflare challenge berhasil di-solve! App melanjutkan scraping.")
 				break
 			}
-			q.logger.Debug("Still waiting for Cloudflare...", "attempt", i+1)
+			if i%10 == 9 {
+				q.logger.Info("Still waiting for Cloudflare challenge to be solved...", "elapsed", fmt.Sprintf("%ds", (i+1)*3))
+			}
 		}
 
 		if isCloudflareChallenge(htmlContent) {
-			return nil, fmt.Errorf("blocked by Cloudflare challenge (timeout after 45s)")
+			return nil, fmt.Errorf("blocked by Cloudflare challenge (timeout after 5 minutes)")
 		}
 	}
 
