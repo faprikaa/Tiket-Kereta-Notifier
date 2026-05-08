@@ -70,12 +70,24 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 	}
 	logger.Info("Launching Chrome without --headless", "display", os.Getenv("DISPLAY"))
 
+	// Use the system chromium-browser binary (same one the user runs manually).
+	// This shares the same fingerprint/version that Cloudflare already knows.
+	chromiumBin := findChromiumBin()
+	logger.Info("Using chromium binary", "path", chromiumBin)
+
+	// Point to the system profile so cf_clearance cookies from manual browsing
+	// are reused automatically. The user can open chromium-browser manually,
+	// solve the CF challenge once, and the app will inherit those cookies.
+	profileDir := "/root/.config/chromium"
+	logger.Info("Using chromium profile", "dir", profileDir)
+
 	l := launcher.New().
+		Bin(chromiumBin).
 		Headless(false).
 		Set("disable-blink-features", "AutomationControlled").
+		Set("user-data-dir", profileDir).
 		Set("window-size", "1920,1080").
-		Set("lang", "id-ID,id,en-US,en").
-		Set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36")
+		Set("lang", "id-ID,id,en-US,en")
 
 	if os.Getuid() == 0 {
 		l = l.Set("no-sandbox")
@@ -164,6 +176,22 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL string) *BrowserQueue {
 
 // checkProxyIP verifies the proxy is working by fetching the public IP
 // from ifconfig.me through both direct and proxied connections for comparison.
+// findChromiumBin returns the path to the system chromium binary.
+func findChromiumBin() string {
+	candidates := []string{
+		"/usr/bin/chromium-browser",
+		"/usr/bin/chromium",
+		"/usr/bin/google-chrome",
+		"/usr/bin/google-chrome-stable",
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "" // empty = go-rod downloads its own
+}
+
 func checkProxyIP(logger *slog.Logger, proxyURL string) {
 	const ipCheckURL = "https://ifconfig.me/ip"
 	httpTimeout := 15 * time.Second
