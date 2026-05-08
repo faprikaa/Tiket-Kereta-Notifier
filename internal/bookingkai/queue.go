@@ -69,7 +69,7 @@ func (q *BrowserQueue) notify(msg string) {
 // NewBrowserQueue creates a shared browser queue with stealth browser + cloudscraper fallback.
 // All bookingkai providers should share the same queue so requests are serialized.
 // display: X display to use (e.g. ":10"). xauthority: path to Xauthority file (optional).
-func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiumPath string) *BrowserQueue {
+func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiumPath string, headless bool) *BrowserQueue {
 	// --- 1. Launch stealth browser ---
 	// Do NOT use --headless — Cloudflare detects it even with stealth plugins.
 	// Use the configured X display so Chrome renders on a real/virtual screen.
@@ -111,9 +111,10 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiu
 	profileDir := "/root/.config/chromium-kai-notifier"
 	logger.Info("Using chromium profile", "dir", profileDir)
 
+	logger.Info("Browser headless mode", "headless", headless)
 	l := launcher.New().
 		Bin(chromiumBin).
-		Headless(false).
+		Headless(headless).
 		Set("disable-blink-features", "AutomationControlled").
 		Set("user-data-dir", profileDir).
 		Set("window-size", "1920,1080").

@@ -85,6 +85,7 @@ type BrowserConfig struct {
 	Display      string `yaml:"display"`        // X display, e.g. ":10" (default: ":10")
 	XAuthority   string `yaml:"xauthority"`     // Path to Xauthority file (auto-detected if empty)
 	ChromiumPath string `yaml:"chromium_path"`  // Path to chromium binary (auto-detected if empty)
+	Headless     bool   `yaml:"headless"`       // Run browser in headless mode (default: false)
 }
 
 // Config represents the full application configuration

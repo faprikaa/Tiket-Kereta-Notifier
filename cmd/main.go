@@ -115,7 +115,7 @@ func initAllProviders(ctx context.Context, logger *slog.Logger, cfg *config.Conf
 	var bkQueue *bookingkai.BrowserQueue
 	for _, flat := range cfg.FlatTrains {
 		if flat.ProviderName == "bookingkai" {
-			bkQueue = bookingkai.NewBrowserQueue(logger, flat.ProxyURL, cfg.Browser.Display, cfg.Browser.XAuthority, cfg.Browser.ChromiumPath)
+			bkQueue = bookingkai.NewBrowserQueue(logger, flat.ProxyURL, cfg.Browser.Display, cfg.Browser.XAuthority, cfg.Browser.ChromiumPath, cfg.Browser.Headless)
 			break
 		}
 	}

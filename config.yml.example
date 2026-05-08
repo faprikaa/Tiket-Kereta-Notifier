@@ -13,6 +13,7 @@ webhook:
 # Konfigurasi browser (digunakan oleh provider bookingkai)
 # Browser dijalankan tanpa --headless agar tidak terdeteksi Cloudflare
 browser:
+  headless: false                             # Headless mode (default: false, non-headless lebih susah dideteksi Cloudflare)
   display: ":10"                              # X display (default: ":10", sesuaikan dengan display RDP kamu)
   xauthority: "/root/.Xauthority"             # Path Xauthority (opsional, dicari otomatis jika kosong)
   chromium_path: "/usr/bin/chromium-browser"  # Path binary chromium (opsional, dicari otomatis jika kosong)
