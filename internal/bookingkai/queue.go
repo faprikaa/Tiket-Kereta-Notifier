@@ -90,15 +90,9 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiu
 	chromiumBin := chromiumPath
 	logger.Info("Using chromium binary", "path", chromiumBin)
 
-	// Use a dedicated profile dir for the app — avoids SingletonLock conflict
-	// with any manually opened Chromium window.
-	profileDir := "/root/.config/chromium-kai-notifier"
-	logger.Info("Using chromium profile", "dir", profileDir)
-
 	l := launcher.New().
 		Headless(headless).
 		Set("disable-blink-features", "AutomationControlled").
-		Set("user-data-dir", profileDir).
 		Set("window-size", "1920,1080").
 		Set("lang", "id-ID,id,en-US,en")
 	if chromiumBin != "" {
