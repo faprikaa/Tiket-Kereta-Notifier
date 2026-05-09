@@ -85,19 +85,18 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiu
 		"xauthority", xauthority,
 		"headless", headless)
 
-	// Only set a custom chromium binary when explicitly configured; empty
-	// string lets go-rod use its own bundled/downloaded browser.
 	chromiumBin := chromiumPath
+	if chromiumBin == "" {
+		chromiumBin = findChromiumBin()
+	}
 	logger.Info("Using chromium binary", "path", chromiumBin)
 
 	l := launcher.New().
 		Headless(headless).
+		Bin(chromiumBin).
 		Set("disable-blink-features", "AutomationControlled").
 		Set("window-size", "1920,1080").
 		Set("lang", "id-ID,id,en-US,en")
-	if chromiumBin != "" {
-		l = l.Bin(chromiumBin)
-	}
 
 	if os.Getuid() == 0 {
 		l = l.Set("no-sandbox")
@@ -182,6 +181,21 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiu
 	}
 
 	return q
+}
+
+func findChromiumBin() string {
+	candidates := []string{
+		"/usr/bin/chromium-browser",
+		"/usr/bin/chromium",
+		"/usr/bin/google-chrome",
+		"/usr/bin/google-chrome-stable",
+	}
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
 }
 
 // checkProxyIP verifies the proxy is working by fetching the public IP
