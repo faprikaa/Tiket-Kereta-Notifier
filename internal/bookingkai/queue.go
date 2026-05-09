@@ -493,8 +493,8 @@ func (q *BrowserQueue) fetchViaBrowser(ctx context.Context, searchURL string) ([
 	// Check for Cloudflare challenge — wait up to 5 minutes for manual solve
 	if isCloudflareChallenge(htmlContent) {
 		q.logger.Warn("Cloudflare challenge detected — waiting up to 5 minutes for manual solve",
-			"instruction", "open chromium-browser --user-data-dir=/root/.config/chromium-kai-notifier --no-sandbox on your RDP session and solve the challenge")
-		q.notify("🔐 *Cloudflare Challenge* terdeteksi di booking.kai.id\n\nSelesaikan manual di browser VPS:\n```\nchromium-browser --user-data-dir=/root/.config/chromium-kai-notifier --no-sandbox\n```\nApp akan otomatis lanjut setelah solved (max 5 menit)")
+			"instruction", "open chromium-browser --no-sandbox on your RDP session and solve the challenge")
+		q.notify("🔐 *Cloudflare Challenge* terdeteksi di booking.kai.id\n\nSelesaikan manual di browser VPS:\n```\nchromium-browser --no-sandbox\n```\nApp akan otomatis lanjut setelah solved (max 5 menit)")
 
 		for i := 0; i < 100; i++ {
 			time.Sleep(3 * time.Second)
