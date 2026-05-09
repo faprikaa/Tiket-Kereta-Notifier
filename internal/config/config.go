@@ -170,10 +170,6 @@ func (c *Config) processTrainConfigs() {
 		c.Webhook.Port = 8080
 	}
 
-	// Set default browser display
-	if c.Browser.Display == "" {
-		c.Browser.Display = ":10"
-	}
 }
 
 // Validate checks required configuration fields

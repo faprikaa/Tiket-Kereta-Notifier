@@ -71,39 +71,23 @@ func (q *BrowserQueue) notify(msg string) {
 // display: X display to use (e.g. ":10"). xauthority: path to Xauthority file (optional).
 func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiumPath string, headless bool) *BrowserQueue {
 	// --- 1. Launch stealth browser ---
-	// Do NOT use --headless — Cloudflare detects it even with stealth plugins.
-	// Use the configured X display so Chrome renders on a real/virtual screen.
-	if display == "" {
-		display = ":10"
+	// Only override DISPLAY/XAUTHORITY when explicitly configured; otherwise
+	// let go-rod (and the OS environment) handle display/auth automatically.
+	if display != "" {
+		os.Setenv("DISPLAY", display)
 	}
-	os.Setenv("DISPLAY", display)
-
 	if xauthority != "" {
 		os.Setenv("XAUTHORITY", xauthority)
-	} else if os.Getenv("XAUTHORITY") == "" {
-		// Try common locations automatically
-		candidates := []string{
-			"/root/.Xauthority",
-			os.Getenv("HOME") + "/.Xauthority",
-		}
-		for _, p := range candidates {
-			if _, err := os.Stat(p); err == nil {
-				os.Setenv("XAUTHORITY", p)
-				xauthority = p
-				break
-			}
-		}
 	}
 
-	logger.Info("Launching Chrome without --headless",
+	logger.Info("Launching browser",
 		"display", display,
-		"xauthority", os.Getenv("XAUTHORITY"))
+		"xauthority", xauthority,
+		"headless", headless)
 
-	// Use configured chromium path, or auto-detect from common locations.
+	// Only set a custom chromium binary when explicitly configured; empty
+	// string lets go-rod use its own bundled/downloaded browser.
 	chromiumBin := chromiumPath
-	if chromiumBin == "" {
-		chromiumBin = findChromiumBin()
-	}
 	logger.Info("Using chromium binary", "path", chromiumBin)
 
 	// Use a dedicated profile dir for the app — avoids SingletonLock conflict
@@ -111,14 +95,15 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiu
 	profileDir := "/root/.config/chromium-kai-notifier"
 	logger.Info("Using chromium profile", "dir", profileDir)
 
-	logger.Info("Browser headless mode", "headless", headless)
 	l := launcher.New().
-		Bin(chromiumBin).
 		Headless(headless).
 		Set("disable-blink-features", "AutomationControlled").
 		Set("user-data-dir", profileDir).
 		Set("window-size", "1920,1080").
 		Set("lang", "id-ID,id,en-US,en")
+	if chromiumBin != "" {
+		l = l.Bin(chromiumBin)
+	}
 
 	if os.Getuid() == 0 {
 		l = l.Set("no-sandbox")
@@ -207,21 +192,6 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiu
 
 // checkProxyIP verifies the proxy is working by fetching the public IP
 // from ifconfig.me through both direct and proxied connections for comparison.
-// findChromiumBin returns the path to the system chromium binary.
-func findChromiumBin() string {
-	candidates := []string{
-		"/usr/bin/chromium-browser",
-		"/usr/bin/chromium",
-		"/usr/bin/google-chrome",
-		"/usr/bin/google-chrome-stable",
-	}
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return "" // empty = go-rod downloads its own
-}
 
 func checkProxyIP(logger *slog.Logger, proxyURL string) {
 	const ipCheckURL = "https://ifconfig.me/ip"
