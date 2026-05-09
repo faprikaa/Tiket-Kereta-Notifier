@@ -97,9 +97,12 @@ func main() {
 	logger.Info("Validating configured trains...")
 	if err := validateTrainsExist(ctx, logger, providers, cfg); err != nil {
 		logger.Error("Train validation failed", "error", err)
+		telegram.SendMessage(fmt.Sprintf("❌ Bot failed to start!\n%v", err), cfg.Telegram.ChatID)
 		os.Exit(1)
 	}
 	logger.Info("✅ All configured trains validated successfully")
+
+	telegram.SendMessage(fmt.Sprintf("🚀 Bot started!\nMonitoring %d trains", len(cfg.FlatTrains)), cfg.Telegram.ChatID)
 
 	runBot(ctx, logger, cfg, tgBot)
 
@@ -338,7 +341,7 @@ func runBot(ctx context.Context, logger *slog.Logger, cfg *config.Config, tgBot 
 				return
 			}
 			tgBot.SetWebhook(publicURL + "/webhook")
-			telegram.SendMessage(fmt.Sprintf("🚀 Bot started!\nMonitoring %d trains\nWebhook: %s", len(cfg.FlatTrains), publicURL), cfg.Telegram.ChatID)
+			telegram.SendMessage(fmt.Sprintf("🔗 Webhook: %s", publicURL), cfg.Telegram.ChatID)
 		}()
 
 		if err := tgBot.StartWebhook(ctx, cfg.Webhook.Port, []string{cfg.Telegram.ChatID}); err != nil {
@@ -346,7 +349,6 @@ func runBot(ctx context.Context, logger *slog.Logger, cfg *config.Config, tgBot 
 		}
 		<-ctx.Done()
 	} else {
-		telegram.SendMessage(fmt.Sprintf("🚀 Bot started!\nMonitoring %d trains", len(cfg.FlatTrains)), cfg.Telegram.ChatID)
 		logger.Info("Bot running in long-polling/manual mode. Press Ctrl+C to exit.")
 		<-ctx.Done()
 	}
