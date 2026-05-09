@@ -102,9 +102,7 @@ func main() {
 	}
 	logger.Info("✅ All configured trains validated successfully")
 
-	telegram.SendMessage(fmt.Sprintf("🚀 Bot started!\nMonitoring %d trains", len(cfg.FlatTrains)), cfg.Telegram.ChatID)
-
-	runBot(ctx, logger, cfg, tgBot)
+	runBot(ctx, logger, cfg, tgBot, len(providers))
 
 	// Wait for all schedulers to finish
 	wg.Wait()
@@ -329,8 +327,18 @@ func validateTrainsExist(ctx context.Context, logger *slog.Logger, providers []c
 }
 
 // runBot starts the bot in webhook or polling mode
-func runBot(ctx context.Context, logger *slog.Logger, cfg *config.Config, tgBot *telegram.Bot) {
+func runBot(ctx context.Context, logger *slog.Logger, cfg *config.Config, tgBot *telegram.Bot, trainCount int) {
 	var t *tunnel.Tunnel
+
+	helpText := fmt.Sprintf(`🚂 Train Notifier — Monitoring %d trains
+
+/list - List semua kereta
+/list [n] - Detail kereta #n
+/check [n] - Check kereta #n (atau semua)
+/all [n] - Semua kereta di rute #n
+/status [n] - Status kereta #n
+/history [n] [count] - History kereta #n
+/toggle [n] - Pause/resume kereta #n`, trainCount)
 
 	if cfg.Webhook.Enabled {
 		t = tunnel.New(logger)
@@ -341,7 +349,8 @@ func runBot(ctx context.Context, logger *slog.Logger, cfg *config.Config, tgBot 
 				return
 			}
 			tgBot.SetWebhook(publicURL + "/webhook")
-			telegram.SendMessage(fmt.Sprintf("🔗 Webhook: %s", publicURL), cfg.Telegram.ChatID)
+			msg := fmt.Sprintf("🚀 Bot started!\n🔗 %s\n\n%s", publicURL, helpText)
+			telegram.SendMessage(msg, cfg.Telegram.ChatID)
 		}()
 
 		if err := tgBot.StartWebhook(ctx, cfg.Webhook.Port, []string{cfg.Telegram.ChatID}); err != nil {
@@ -349,6 +358,8 @@ func runBot(ctx context.Context, logger *slog.Logger, cfg *config.Config, tgBot 
 		}
 		<-ctx.Done()
 	} else {
+		msg := fmt.Sprintf("🚀 Bot started!\n\n%s", helpText)
+		telegram.SendMessage(msg, cfg.Telegram.ChatID)
 		logger.Info("Bot running in long-polling/manual mode. Press Ctrl+C to exit.")
 		<-ctx.Done()
 	}
