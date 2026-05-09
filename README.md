@@ -46,7 +46,7 @@ brew install cloudflared
 # Pastikan curl_chrome110 ada di PATH
 ```
 
-> **Note:** BookingKAI provider menggunakan headless Chrome (go-rod) untuk bypass Cloudflare. Chrome/Chromium akan otomatis di-download jika belum ada.
+> **Note:** BookingKAI provider menggunakan Chrome (go-rod) untuk bypass Cloudflare. Secara default memakai Chromium yang terinstall di sistem (`/usr/bin/chromium-browser`, dll). Pastikan Chromium sudah terinstall, atau set `chromium_path` secara eksplisit.
 
 ## Configuration
 
@@ -60,6 +60,14 @@ telegram:
 webhook:
   enabled: false
   port: 8080
+
+# Konfigurasi browser untuk BookingKAI provider (opsional)
+# Semua field opsional — kosong = pakai default sistem/go-rod
+browser:
+  chromium_path: ""   # Path ke chromium binary. Kosong = auto-detect dari PATH sistem
+  display: ""         # X display, misal ":10" (untuk server Linux tanpa GUI). Kosong = tidak di-set
+  xauthority: ""      # Path ke Xauthority file. Kosong = tidak di-set
+  headless: false     # true = headless mode (tidak butuh X display)
 
 trains:
   # Monitor kereta spesifik via banyak provider
@@ -189,7 +197,7 @@ go run cmd/main.go -c myconfig.yml
 | **tiketkai** | TiketKai.com | AES encrypted |
 | **traveloka** | Traveloka.com | Direct JSON |
 | **tiketcom** | Tiket.com | Butuh curl_chrome110, support proxy |
-| **bookingkai** | booking.kai.id | Official KAI, headless Chrome (go-rod), Cloudflare bypass, shared queue (serial), support proxy |
+| **bookingkai** | booking.kai.id | Official KAI, Chrome (go-rod), Cloudflare bypass, shared queue (serial), support proxy |
 
 ## Troubleshooting
 
@@ -198,6 +206,11 @@ Pastikan nama kereta sesuai dengan yang tampil di provider. Atau gunakan `name: 
 
 ### Tiket.com blocked by Turnstile
 Gunakan proxy via `proxy_url` atau pastikan `curl_chrome110` terinstall.
+
+### BookingKAI: Missing X server or $DISPLAY
+Chrome non-headless butuh X display. Pilih salah satu:
+- Set `browser.headless: true` di config (tidak butuh X server)
+- Atau jalankan Xvfb dan set `browser.display: ":10"` di config
 
 ### Tunnel not accessible
 Pastikan `cloudflared` terinstall dan `webhook.enabled: true`.
