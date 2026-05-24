@@ -379,7 +379,8 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		telegram.SendMessage(sb.String(), chatID)
 	})
 
-	// Command: /toggle [index] - Toggle pause/resume for a specific train monitor
+	// Command: /toggle [index] - Toggle pause/resume for a specific train monitor.
+	// If a sleep timer is active for that train, it is cancelled first.
 	bot.RegisterCommand("/toggle", func(ctx context.Context, chatID, args string) {
 		args = strings.TrimSpace(args)
 
@@ -394,16 +395,33 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 			return
 		}
 
-		provider := providers[idx-1]
-		flat := cfg.FlatTrains[idx-1]
+		i := idx - 1
+		provider := providers[i]
+		flat := cfg.FlatTrains[i]
+
+		// Cancel any active sleep for this train so the timer doesn't interfere.
+		sleep.mu.Lock()
+		sleepCancelled := false
+		if e, ok := sleep.entries[i]; ok {
+			e.cancel()
+			delete(sleep.entries, i)
+			sleepCancelled = true
+		}
+		sleep.mu.Unlock()
+
 		newState := !provider.IsPaused()
 		provider.SetPaused(newState)
 
+		var msg string
 		if newState {
-			telegram.SendMessage(fmt.Sprintf("⏸️ Train #%d (%s) paused", idx, flat.Name), chatID)
+			msg = fmt.Sprintf("⏸️ Train #%d (%s) paused", idx, flat.Name)
 		} else {
-			telegram.SendMessage(fmt.Sprintf("▶️ Train #%d (%s) resumed", idx, flat.Name), chatID)
+			msg = fmt.Sprintf("▶️ Train #%d (%s) resumed", idx, flat.Name)
 		}
+		if sleepCancelled {
+			msg += "\n⚠️ Sleep timer dibatalkan."
+		}
+		telegram.SendMessage(msg, chatID)
 	})
 
 	// Command: /sleep <index> <menit> - Pause train #index for N minutes, then auto-resume.
@@ -434,16 +452,22 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 
 		sleep.mu.Lock()
 		// Cancel existing sleep for this provider, if any
+		prevSleep := false
 		if e, ok := sleep.entries[i]; ok {
 			e.cancel()
 			delete(sleep.entries, i)
+			prevSleep = true
 		}
 
 		if minutes == 0 {
 			// Resume immediately
 			provider.SetPaused(false)
 			sleep.mu.Unlock()
-			telegram.SendMessage(fmt.Sprintf("⏰ Sleep dibatalkan! Train #%d (%s) dilanjutkan.", idx, flat.Name), chatID)
+			msg := fmt.Sprintf("⏰ Train #%d (%s) dilanjutkan.", idx, flat.Name)
+			if !prevSleep {
+				msg = "⚠️ Tidak ada sleep aktif untuk train ini.\n" + msg
+			}
+			telegram.SendMessage(msg, chatID)
 			return
 		}
 
@@ -453,6 +477,7 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		sleepCtx, cancelFn := context.WithTimeout(context.Background(), time.Duration(minutes)*time.Minute)
 		sleep.entries[i] = &sleepEntry{cancel: cancelFn, wakeAt: wakeAt}
 		sleep.mu.Unlock()
+
 
 		go func() {
 			defer cancelFn()
@@ -471,8 +496,12 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 				time.Now().Format("15:04"), idx, flat.Name), chatID)
 		}()
 
-		telegram.SendMessage(fmt.Sprintf("💤 Train #%d (%s) di-sleep %d menit\nAktif kembali pukul %s.",
-			idx, flat.Name, minutes, wakeAt.Format("15:04")), chatID)
+		note := ""
+		if prevSleep {
+			note = "\n⚠️ Sleep sebelumnya dibatalkan."
+		}
+		telegram.SendMessage(fmt.Sprintf("💤 Train #%d (%s) di-sleep %d menit\nAktif kembali pukul %s.%s",
+			idx, flat.Name, minutes, wakeAt.Format("15:04"), note), chatID)
 	})
 
 	// Command: /help
