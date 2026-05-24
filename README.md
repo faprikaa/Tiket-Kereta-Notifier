@@ -177,8 +177,8 @@ go run cmd/main.go -c myconfig.yml
 | `/toggle <n>` | Pause/resume monitoring kereta #n |
 | `/status [n]` | Status dan settings kereta #n (atau summary semua) |
 | `/history <n> [count]` | Riwayat check kereta #n |
-| `/sleep <menit>` | Pause semua monitoring selama N menit, lalu auto-resume |
-| `/sleep` | Cek sisa waktu sleep aktif (atau `/sleep 0` untuk bangunkan sekarang) |
+| `/sleep <n> <menit>` | Pause train #n selama N menit, lalu auto-resume |
+| `/sleep <n> 0` | Batalkan sleep train #n, resume sekarang |
 | `/help` | Bantuan |
 
 **Contoh:**
@@ -192,19 +192,19 @@ go run cmd/main.go -c myconfig.yml
 /status            # Summary semua kereta (tampilkan jika sedang sleep)
 /status 2          # Status detail kereta #2 + semua settings
 /history 1 5       # 5 history terakhir kereta pertama
-/sleep 30          # Pause semua 30 menit, lalu auto-resume
-/sleep 0           # Batalkan sleep, langsung resume sekarang
+/sleep 1 30        # Pause train #1 selama 30 menit, lalu auto-resume
+/sleep 1 0         # Batalkan sleep train #1, resume sekarang
 ```
 
 ### Sleep Mode
 
-`/sleep <menit>` mem-pause **semua** provider sekaligus selama N menit. Berguna saat kamu tidak ingin diganggu notifikasi untuk sementara.
+`/sleep <index> <menit>` mem-pause train #n selama N menit. Keduanya wajib diisi.
 
-- Saat sleep aktif, semua check tetap berjalan secara timer — hanya notifikasi yang tidak dikirim
-- Setelah waktu habis, bot otomatis mengirim pesan konfirmasi dan melanjutkan monitoring
-- Memanggil `/sleep` lagi saat sleep aktif akan **mereset** timer ke durasi baru
-- `/sleep 0` membatalkan sleep dan langsung meresumekan semua provider
-- `/status` menampilkan sisa waktu sleep di bagian atas jika sedang aktif
+- `/sleep 2 60` → pause train #2 selama 60 menit
+- `/sleep 2 0` → batalkan sleep train #2, resume sekarang
+- Setiap train punya sleep timer independen — bisa sleep beberapa train sekaligus dengan timer berbeda
+- Setelah waktu habis, bot otomatis mengirim pesan konfirmasi dan melanjutkan train tersebut
+- `/status` menampilkan train mana saja yang sedang sleep beserta sisa waktu masing-masing
 
 ## Notification Format
 
