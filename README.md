@@ -10,6 +10,8 @@ Bot Telegram untuk monitoring ketersediaan tiket kereta api dari TiketKai, Trave
 - ✅ **Browser Queue** - BookingKAI requests diproses serial via shared queue (anti rate-limit)
 - ✅ **Wildcard Train Name** - Pakai `"any"` / `"*"` untuk monitor semua kereta di rute
 - ✅ **Filter Harga** - Filter tiket berdasarkan harga maksimal (Rupiah)
+- ✅ **Filter Jam Berangkat** - Filter kereta berdasarkan jam keberangkatan (bookingkai only)
+- ✅ **Sleep Mode** - Pause semua monitoring sementara dengan auto-resume terjadwal
 - ✅ **YAML Config** - Konfigurasi mudah via file YAML
 - ✅ **Startup Validation** - Verifikasi kereta ada sebelum monitoring
 - ✅ **Telegram Bot** - Notifikasi real-time via Telegram
@@ -101,6 +103,18 @@ trains:
     providers:
       - tiketkai
 
+  # Filter jam keberangkatan: hanya notif jika kereta berangkat jam 06:00–14:59
+  # Hanya berlaku untuk provider bookingkai
+  - name: BENGAWAN
+    origin: LPN
+    destination: CKR
+    date: "2026-04-02"
+    interval: 300
+    min_departure_hour: 6   # berangkat >= jam 06:00
+    max_departure_hour: 14  # berangkat <= jam 14:59
+    providers:
+      - bookingkai
+
   # Kombinasi: semua kereta di rute, asalkan harganya <= Rp 500.000
   - name: "*"
     origin: GMR
@@ -138,6 +152,8 @@ trains:
 | `providers` | Yes | Array provider (string atau object dengan `proxy_url`) |
 | `interval` | No | Interval check dalam detik (default: 300) |
 | `max_price` | No | Harga maksimal dalam Rupiah — hanya notif jika harga ≤ nilai ini (0 = tanpa filter) |
+| `min_departure_hour` | No | Jam keberangkatan minimum 0–23 (0 = tanpa filter). **Hanya bookingkai.** |
+| `max_departure_hour` | No | Jam keberangkatan maksimum 0–23 (0 = tanpa filter). **Hanya bookingkai.** |
 | `notes` | No | Catatan opsional, muncul di `/list` dan notifikasi |
 
 ## Usage
@@ -157,23 +173,38 @@ go run cmd/main.go -c myconfig.yml
 |---------|-------------|
 | `/list [n]` | List semua kereta, atau detail kereta #n |
 | `/check [n]` | Check kereta #n (atau semua) |
-| `/all <n>` | Tampilkan semua kereta pada route #n (tanpa filter nama) |
+| `/all <n>` | Tampilkan semua kereta pada route #n (tanpa filter nama/harga/jam) |
 | `/toggle <n>` | Pause/resume monitoring kereta #n |
-| `/status [n]` | Status detail kereta #n (atau summary) |
+| `/status [n]` | Status dan settings kereta #n (atau summary semua) |
 | `/history <n> [count]` | Riwayat check kereta #n |
+| `/sleep <menit>` | Pause semua monitoring selama N menit, lalu auto-resume |
+| `/sleep` | Cek sisa waktu sleep aktif (atau `/sleep 0` untuk bangunkan sekarang) |
 | `/help` | Bantuan |
 
 **Contoh:**
 ```
 /list              # Lihat semua kereta
-/list 1            # Detail kereta #1 (termasuk max_price jika diset)
+/list 1            # Detail kereta #1 (termasuk max_price, jam berangkat, dll)
 /check             # Check semua kereta
 /check 1           # Check kereta pertama saja
 /all 1             # Tampilkan semua kereta pada route kereta #1
 /toggle 3          # Pause/resume kereta #3
-/status 2          # Status detail kereta kedua
+/status            # Summary semua kereta (tampilkan jika sedang sleep)
+/status 2          # Status detail kereta #2 + semua settings
 /history 1 5       # 5 history terakhir kereta pertama
+/sleep 30          # Pause semua 30 menit, lalu auto-resume
+/sleep 0           # Batalkan sleep, langsung resume sekarang
 ```
+
+### Sleep Mode
+
+`/sleep <menit>` mem-pause **semua** provider sekaligus selama N menit. Berguna saat kamu tidak ingin diganggu notifikasi untuk sementara.
+
+- Saat sleep aktif, semua check tetap berjalan secara timer — hanya notifikasi yang tidak dikirim
+- Setelah waktu habis, bot otomatis mengirim pesan konfirmasi dan melanjutkan monitoring
+- Memanggil `/sleep` lagi saat sleep aktif akan **mereset** timer ke durasi baru
+- `/sleep 0` membatalkan sleep dan langsung meresumekan semua provider
+- `/status` menampilkan sisa waktu sleep di bagian atas jika sedang aktif
 
 ## Notification Format
 
@@ -197,7 +228,7 @@ go run cmd/main.go -c myconfig.yml
 | **tiketkai** | TiketKai.com | AES encrypted |
 | **traveloka** | Traveloka.com | Direct JSON |
 | **tiketcom** | Tiket.com | Butuh curl_chrome110, support proxy |
-| **bookingkai** | booking.kai.id | Official KAI, Chrome (go-rod), Cloudflare bypass, shared queue (serial), support proxy |
+| **bookingkai** | booking.kai.id | Official KAI, Chrome (go-rod), Cloudflare bypass, shared queue (serial), support proxy, filter jam berangkat |
 
 ## Troubleshooting
 

@@ -62,6 +62,19 @@ trains:
   #   providers:
   #     - traveloka
 
+  # Filter jam keberangkatan: min_departure_hour dan max_departure_hour (0 = tanpa filter)
+  # Hanya berlaku untuk provider bookingkai.
+  # Contoh: notifikasi hanya untuk kereta yang berangkat antara jam 06:00 – 14:59
+  # - name: BENGAWAN
+  #   origin: LPN
+  #   destination: CKR
+  #   date: "2026-04-02"
+  #   interval: 300
+  #   min_departure_hour: 6   # minimal jam 06:00
+  #   max_departure_hour: 14  # maksimal jam 14:59
+  #   providers:
+  #     - bookingkai
+
   # Contoh: kereta dengan provider yang butuh proxy
   # - name: ARGO DWIPANGGA
   #   origin: GMR

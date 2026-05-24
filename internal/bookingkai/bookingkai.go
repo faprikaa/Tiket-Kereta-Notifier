@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,41 +25,81 @@ var monthNames = []string{
 
 // Provider implements common.Provider for booking.kai.id
 type Provider struct {
-	Logger        *slog.Logger
-	Origin        string
-	Destination   string
-	Date          string        // YYYY-MM-DD format
-	TrainName     string        // Optional: specific train to monitor ("any"/"*" = all trains)
-	MaxPrice      int           // Max price filter in IDR (0 = no filter)
-	CheckInterval time.Duration // Polling interval
-	Index         int           // Global index (1-based)
-	Notes         string        // Optional user notes
-	history       *history.Store
-	status        *common.StatusTracker
-	queue         *BrowserQueue
-	lastErrNotify time.Time // rate-limit error notifications
+	Logger           *slog.Logger
+	Origin           string
+	Destination      string
+	Date             string        // YYYY-MM-DD format
+	TrainName        string        // Optional: specific train to monitor ("any"/"*" = all trains)
+	MaxPrice         int           // Max price filter in IDR (0 = no filter)
+	MinDepartureHour int           // Min departure hour 0-23 (0 = no filter)
+	MaxDepartureHour int           // Max departure hour 0-23 (0 = no filter)
+	CheckInterval    time.Duration // Polling interval
+	Index            int           // Global index (1-based)
+	Notes            string        // Optional user notes
+	history          *history.Store
+	status           *common.StatusTracker
+	queue            *BrowserQueue
+	lastErrNotify    time.Time // rate-limit error notifications
 }
 
 // NewProvider creates a new BookingKAI provider.
 // The queue parameter should be shared across all bookingkai providers.
-func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, queue *BrowserQueue, index int, notes string, maxPrice int) *Provider {
+func NewProvider(logger *slog.Logger, origin, dest, date, trainName string, interval time.Duration, queue *BrowserQueue, index int, notes string, maxPrice, minDepartureHour, maxDepartureHour int) *Provider {
 	if interval <= 0 {
 		interval = 5 * time.Minute
 	}
 	return &Provider{
-		Logger:        logger,
-		Origin:        origin,
-		Destination:   dest,
-		Date:          date,
-		TrainName:     trainName,
-		MaxPrice:      maxPrice,
-		CheckInterval: interval,
-		Index:         index,
-		Notes:         notes,
-		history:       history.NewStore(100),
-		status:        common.NewStatusTracker(),
-		queue:         queue,
+		Logger:           logger,
+		Origin:           origin,
+		Destination:      dest,
+		Date:             date,
+		TrainName:        trainName,
+		MaxPrice:         maxPrice,
+		MinDepartureHour: minDepartureHour,
+		MaxDepartureHour: maxDepartureHour,
+		CheckInterval:    interval,
+		Index:            index,
+		Notes:            notes,
+		history:          history.NewStore(100),
+		status:           common.NewStatusTracker(),
+		queue:            queue,
 	}
+}
+
+// parseDepartureHour parses "HH:MM" and returns the hour. Returns (0, false) on failure.
+func parseDepartureHour(timeStr string) (int, bool) {
+	colonIdx := strings.Index(timeStr, ":")
+	if colonIdx < 1 {
+		return 0, false
+	}
+	h, err := strconv.Atoi(timeStr[:colonIdx])
+	if err != nil || h < 0 || h > 23 {
+		return 0, false
+	}
+	return h, true
+}
+
+// filterByDepartureHour filters trains by min/max departure hour.
+func (p *Provider) filterByDepartureHour(trains []common.Train) []common.Train {
+	if p.MinDepartureHour == 0 && p.MaxDepartureHour == 0 {
+		return trains
+	}
+	filtered := trains[:0:0]
+	for _, t := range trains {
+		h, ok := parseDepartureHour(t.DepartureTime)
+		if !ok {
+			filtered = append(filtered, t) // unknown format: include
+			continue
+		}
+		if p.MinDepartureHour > 0 && h < p.MinDepartureHour {
+			continue
+		}
+		if p.MaxDepartureHour > 0 && h > p.MaxDepartureHour {
+			continue
+		}
+		filtered = append(filtered, t)
+	}
+	return filtered
 }
 
 // Name returns the provider name
@@ -91,9 +132,9 @@ func (p *Provider) searchWithMethod(ctx context.Context) ([]common.Train, string
 		return nil, "", err
 	}
 
-	// Wildcard "any"/"*" or empty = return all trains
+	// Wildcard "any"/"*" or empty = return all trains (still apply hour filter)
 	if p.TrainName == "" || common.IsWildcard(p.TrainName) {
-		return allTrains, method, nil
+		return p.filterByDepartureHour(allTrains), method, nil
 	}
 
 	// Filter by train name
@@ -104,7 +145,7 @@ func (p *Provider) searchWithMethod(ctx context.Context) ([]common.Train, string
 			filtered = append(filtered, t)
 		}
 	}
-	return filtered, method, nil
+	return p.filterByDepartureHour(filtered), method, nil
 }
 
 // SearchAll returns all trains on the route without filtering

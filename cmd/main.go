@@ -208,6 +208,8 @@ func initProviderForTrain(ctx context.Context, logger *slog.Logger, flat *config
 			index,
 			flat.Notes,
 			flat.MaxPrice,
+			flat.MinDepartureHour,
+			flat.MaxDepartureHour,
 		), nil
 
 	default:

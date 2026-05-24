@@ -37,14 +37,16 @@ func (p *ProviderEntry) UnmarshalYAML(value *yaml.Node) error {
 
 // TrainConfig represents configuration for a single train to monitor
 type TrainConfig struct {
-	Name        string          `yaml:"name"`
-	Origin      string          `yaml:"origin"`
-	Destination string          `yaml:"destination"`
-	Date        string          `yaml:"date"` // YYYY-MM-DD
-	Interval    int             `yaml:"interval"`
-	Notes       string          `yaml:"notes,omitempty"`
-	MaxPrice    int             `yaml:"max_price,omitempty"` // Max price filter in IDR (0 = no filter)
-	Providers   []ProviderEntry `yaml:"providers"`
+	Name             string          `yaml:"name"`
+	Origin           string          `yaml:"origin"`
+	Destination      string          `yaml:"destination"`
+	Date             string          `yaml:"date"` // YYYY-MM-DD
+	Interval         int             `yaml:"interval"`
+	Notes            string          `yaml:"notes,omitempty"`
+	MaxPrice         int             `yaml:"max_price,omitempty"`          // Max price filter in IDR (0 = no filter)
+	MinDepartureHour int             `yaml:"min_departure_hour,omitempty"` // Min departure hour 0-23 (0 = no filter), bookingkai only
+	MaxDepartureHour int             `yaml:"max_departure_hour,omitempty"` // Max departure hour 0-23 (0 = no filter), bookingkai only
+	Providers        []ProviderEntry `yaml:"providers"`
 
 	// Backward compat: single provider field (deprecated, use providers array)
 	Provider string `yaml:"provider,omitempty"`
@@ -64,6 +66,8 @@ type FlatTrainConfig struct {
 	IntervalDuration time.Duration
 	Notes            string
 	MaxPrice         int // Max price filter in IDR (0 = no filter)
+	MinDepartureHour int // Min departure hour filter (0 = no filter), bookingkai only
+	MaxDepartureHour int // Max departure hour filter (0 = no filter), bookingkai only
 	ProviderName     string
 	ProxyURL         string
 }
@@ -159,6 +163,8 @@ func (c *Config) processTrainConfigs() {
 				IntervalDuration: train.IntervalDuration,
 				Notes:            train.Notes,
 				MaxPrice:         train.MaxPrice,
+				MinDepartureHour: train.MinDepartureHour,
+				MaxDepartureHour: train.MaxDepartureHour,
 				ProviderName:     strings.ToLower(prov.Name),
 				ProxyURL:         prov.ProxyURL,
 			})

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"tiket-kereta-notifier/internal/common"
@@ -12,8 +13,17 @@ import (
 	"tiket-kereta-notifier/internal/telegram"
 )
 
+// sleepTracker manages timed global sleep state across all providers.
+type sleepTracker struct {
+	mu     sync.Mutex
+	active bool
+	wakeAt time.Time
+	cancel context.CancelFunc
+}
+
 // RegisterCommands registers commands for multiple providers
 func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *config.Config) {
+	sleep := &sleepTracker{}
 
 	// Command: /check [index] - Check specific train or all trains
 	bot.RegisterCommand("/check", func(ctx context.Context, chatID, args string) {
@@ -161,12 +171,14 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 				msg += fmt.Sprintf("🌐 Proxy: %s\n", func() string {
 					if flat.ProxyURL != "" {
 						return "Yes"
-					} else {
-						return "No"
 					}
+					return "No"
 				}())
 				if flat.MaxPrice > 0 {
 					msg += fmt.Sprintf("💰 Max Price: Rp %s\n", formatRupiah(flat.MaxPrice))
+				}
+				if flat.MinDepartureHour > 0 || flat.MaxDepartureHour > 0 {
+					msg += fmt.Sprintf("🕐 Jam Berangkat: %s\n", formatHourRange(flat.MinDepartureHour, flat.MaxDepartureHour))
 				}
 				if flat.Notes != "" {
 					msg += fmt.Sprintf("📝 Notes: %s\n", flat.Notes)
@@ -264,7 +276,19 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 
 		// Show summary of all trains
 		var sb strings.Builder
-		sb.WriteString("🤖 Bot Status Summary\n\n")
+		sb.WriteString("🤖 Bot Status Summary\n")
+
+		// Show sleep state if active
+		sleep.mu.Lock()
+		sleepActive := sleep.active
+		sleepWakeAt := sleep.wakeAt
+		sleep.mu.Unlock()
+		if sleepActive {
+			remaining := time.Until(sleepWakeAt)
+			sb.WriteString(fmt.Sprintf("\n💤 SLEEPING — aktif pukul %s (%s lagi)\n",
+				sleepWakeAt.Format("15:04"), formatDuration(remaining)))
+		}
+		sb.WriteString("\n")
 
 		totalChecks := 0
 		totalSuccess := 0
@@ -284,6 +308,9 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 			}
 			if status.LastCheckError != "" {
 				icon = "❌"
+			}
+			if provider.IsPaused() {
+				icon = "⏸️"
 			}
 
 			sb.WriteString(fmt.Sprintf("%d. %s %s [%s] via %s\n", i+1, icon, flat.Name, flat.Date, flat.ProviderName))
@@ -370,6 +397,82 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 		}
 	})
 
+	// Command: /sleep <menit> - Pause all monitors for N minutes then auto-resume
+	bot.RegisterCommand("/sleep", func(ctx context.Context, chatID, args string) {
+		args = strings.TrimSpace(args)
+		if args == "" {
+			sleep.mu.Lock()
+			active := sleep.active
+			wakeAt := sleep.wakeAt
+			sleep.mu.Unlock()
+			if active {
+				remaining := time.Until(wakeAt)
+				telegram.SendMessage(fmt.Sprintf("💤 Sedang sleep, aktif kembali pukul %s (%s lagi)\nKirim /sleep 0 untuk bangunkan sekarang.", wakeAt.Format("15:04"), formatDuration(remaining)), chatID)
+			} else {
+				telegram.SendMessage("❌ Usage: /sleep <menit>\nContoh: /sleep 30", chatID)
+			}
+			return
+		}
+
+		minutes, err := strconv.Atoi(args)
+		if err != nil || minutes < 0 {
+			telegram.SendMessage("❌ Masukkan jumlah menit yang valid (contoh: /sleep 30)", chatID)
+			return
+		}
+
+		sleep.mu.Lock()
+		// Cancel existing sleep if any
+		if sleep.active && sleep.cancel != nil {
+			sleep.cancel()
+		}
+
+		if minutes == 0 {
+			// Wake up immediately
+			for _, p := range providers {
+				p.SetPaused(false)
+			}
+			sleep.active = false
+			sleep.cancel = nil
+			sleep.mu.Unlock()
+			telegram.SendMessage(fmt.Sprintf("⏰ Sleep dibatalkan! Monitoring dilanjutkan (%d train aktif).", len(providers)), chatID)
+			return
+		}
+
+		// Pause all providers
+		for _, p := range providers {
+			p.SetPaused(true)
+		}
+
+		wakeAt := time.Now().Add(time.Duration(minutes) * time.Minute)
+		sleep.active = true
+		sleep.wakeAt = wakeAt
+		sleepCtx, cancelFn := context.WithTimeout(context.Background(), time.Duration(minutes)*time.Minute)
+		sleep.cancel = cancelFn
+		sleep.mu.Unlock()
+
+		go func() {
+			defer cancelFn()
+			<-sleepCtx.Done()
+
+			sleep.mu.Lock()
+			wasTimeout := sleepCtx.Err() == context.DeadlineExceeded
+			sleep.active = false
+			sleep.cancel = nil
+			sleep.mu.Unlock()
+
+			if wasTimeout {
+				for _, p := range providers {
+					p.SetPaused(false)
+				}
+				telegram.SendMessage(fmt.Sprintf("⏰ Sleep selesai pukul %s! Monitoring dilanjutkan (%d train aktif).",
+					time.Now().Format("15:04"), len(providers)), chatID)
+			}
+		}()
+
+		telegram.SendMessage(fmt.Sprintf("💤 Sleeping %d menit... aktif kembali pukul %s\n%d train di-pause.",
+			minutes, wakeAt.Format("15:04"), len(providers)), chatID)
+	})
+
 	// Command: /help
 	bot.RegisterCommand("/help", func(ctx context.Context, chatID, args string) {
 		help := fmt.Sprintf(`🚂 Train Notifier (Monitoring %d trains)
@@ -378,15 +481,18 @@ func RegisterCommands(bot *telegram.Bot, providers []common.Provider, cfg *confi
 /list [n] - Show train #n details
 /check [n] - Check train #n (or all)
 /all [n] - Show all trains on route #n
-/status [n] - Status of train #n (or summary)
+/status [n] - Status & settings train #n (or summary)
 /history [n] [count] - History of train #n
 /toggle [n] - Pause/resume train #n
+/sleep <menit> - Pause semua selama N menit, lalu auto-resume
+/sleep - Cek sisa waktu sleep (atau /sleep 0 untuk bangunkan)
 
 Examples:
 /check 1 - Check first train only
 /check - Check all trains
 /all 3 - All trains on route #3
-/toggle 5 - Pause/resume train #5`, len(providers))
+/toggle 5 - Pause/resume train #5
+/sleep 30 - Pause semua 30 menit`, len(providers))
 
 		telegram.SendMessage(help, chatID)
 	})
@@ -431,7 +537,7 @@ func checkTrainResult(ctx context.Context, provider common.Provider, flat config
 	return fmt.Sprintf("⛔ %s [%s] via %s: Habis (%d kereta full)", flat.Name, flat.Date, flat.ProviderName, len(trains))
 }
 
-// showTrainStatus shows detailed status for a single train
+// showTrainStatus shows detailed status and settings for a single train
 func showTrainStatus(chatID string, provider common.Provider, flat config.FlatTrainConfig, index int) {
 	status := provider.GetStatus()
 
@@ -450,28 +556,45 @@ func showTrainStatus(chatID string, provider common.Provider, flat config.FlatTr
 		}
 	}
 
-	msg := fmt.Sprintf(`🚂 Train #%d: %s
+	pausedStr := ""
+	if provider.IsPaused() {
+		pausedStr = " ⏸️ PAUSED"
+	}
 
-📍 Route: %s → %s
-📅 Date: %s
-🔌 Provider: %s
-⏱️ Interval: %s
+	msg := fmt.Sprintf("🚂 Train #%d: %s%s\n\n", index, flat.Name, pausedStr)
+	msg += fmt.Sprintf("📍 Route: %s → %s\n", flat.Origin, flat.Destination)
+	msg += fmt.Sprintf("📅 Date: %s\n", flat.Date)
+	msg += fmt.Sprintf("🔌 Provider: %s\n", flat.ProviderName)
+	msg += fmt.Sprintf("⏱️ Interval: %s\n", flat.IntervalDuration.String())
 
-📊 Statistics:
-• Uptime: %s
-• Checks: %d (✅ %d | ❌ %d)
-• Last: %s - %s`,
-		index, flat.Name,
-		flat.Origin, flat.Destination,
-		flat.Date,
-		flat.ProviderName,
-		flat.IntervalDuration.String(),
-		uptime,
-		status.TotalChecks, status.SuccessfulChecks, status.FailedChecks,
-		lastCheck, lastResult,
-	)
+	// Settings
+	if flat.MaxPrice > 0 {
+		msg += fmt.Sprintf("💰 Max Price: Rp %s\n", formatRupiah(flat.MaxPrice))
+	}
+	if flat.MinDepartureHour > 0 || flat.MaxDepartureHour > 0 {
+		msg += fmt.Sprintf("🕐 Jam Berangkat: %s\n", formatHourRange(flat.MinDepartureHour, flat.MaxDepartureHour))
+	}
+	if flat.Notes != "" {
+		msg += fmt.Sprintf("📝 Notes: %s\n", flat.Notes)
+	}
+
+	msg += fmt.Sprintf("\n📊 Statistics:\n")
+	msg += fmt.Sprintf("• Uptime: %s\n", uptime)
+	msg += fmt.Sprintf("• Checks: %d (✅ %d | ❌ %d)\n", status.TotalChecks, status.SuccessfulChecks, status.FailedChecks)
+	msg += fmt.Sprintf("• Last: %s — %s", lastCheck, lastResult)
 
 	telegram.SendMessage(msg, chatID)
+}
+
+// formatHourRange returns a human-readable departure hour range string.
+func formatHourRange(minH, maxH int) string {
+	if minH > 0 && maxH > 0 {
+		return fmt.Sprintf("%02d:00 – %02d:59", minH, maxH)
+	}
+	if minH > 0 {
+		return fmt.Sprintf("≥ %02d:00", minH)
+	}
+	return fmt.Sprintf("≤ %02d:59", maxH)
 }
 
 // formatRupiah formats an integer as an Indonesian Rupiah string with dot separators

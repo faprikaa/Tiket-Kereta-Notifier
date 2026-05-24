@@ -67,6 +67,23 @@
             "type": "string",
             "description": "Catatan opsional, ditampilkan di /list dan notifikasi"
           },
+          "max_price": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Harga maksimal tiket dalam Rupiah (0 atau tidak diisi = tanpa filter)"
+          },
+          "min_departure_hour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23,
+            "description": "Jam keberangkatan minimum (0-23). Hanya untuk provider bookingkai. 0 = tanpa filter."
+          },
+          "max_departure_hour": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 23,
+            "description": "Jam keberangkatan maksimum (0-23). Hanya untuk provider bookingkai. 0 = tanpa filter."
+          },
           "providers": {
             "type": "array",
             "minItems": 1,
