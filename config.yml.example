@@ -10,13 +10,13 @@ webhook:
   enabled: true
   port: 8080
 
-# Konfigurasi browser (digunakan oleh provider bookingkai)
-# Browser dijalankan tanpa --headless agar tidak terdeteksi Cloudflare
+# Konfigurasi Chromium untuk provider bookingkai
 browser:
-  headless: false                             # Headless mode (default: false, non-headless lebih susah dideteksi Cloudflare)
-  display: ":10"                              # X display (default: ":10", sesuaikan dengan display RDP kamu)
-  xauthority: "/root/.Xauthority"             # Path Xauthority (opsional, dicari otomatis jika kosong)
-  chromium_path: "/usr/bin/chromium-browser"  # Path binary chromium (opsional, dicari otomatis jika kosong)
+  headless: true
+  chromium_path: ""                          # Kosong = auto-detect dari PATH
+  user_data_dir: ".cache/tiket-kereta-notifier/chromium"
+  display: ""                                # Opsional untuk mode non-headless lama
+  xauthority: ""                             # Opsional untuk mode non-headless lama
 
 trains:
   # Satu entry per kereta, bisa punya banyak provider

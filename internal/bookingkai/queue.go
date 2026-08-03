@@ -40,19 +40,21 @@ type JobResult struct {
 	Method string
 }
 
-// BrowserQueue serializes all browser requests to booking.kai.id through a
-// single worker goroutine. It first tries a stealth headless Chrome browser
-// (go-rod + stealth), and falls back to cloudscraper (JA3 spoofing) if
-// Cloudflare still blocks.
+// BrowserQueue serializes all booking.kai.id requests through one persistent
+// Chromium page.
 type BrowserQueue struct {
-	logger     *slog.Logger
-	proxyURL   string
-	browser    *rod.Browser
-	page       *rod.Page // persistent page to retain CF cookies
-	scraper    *cloudscraper.CloudScrapper
-	jobs       chan Job
-	done       chan struct{}
-	notifyFunc func(string) // optional: send Telegram notification
+	logger             *slog.Logger
+	proxyURL           string
+	browser            *rod.Browser
+	page               *rod.Page
+	scraper            *cloudscraper.CloudScrapper
+	browserFetch       func(context.Context, string) ([]common.Train, error)
+	jobs               chan Job
+	done               chan struct{}
+	notifyFunc         func(string)
+	challengeFailures  int
+	nextChallengeRetry time.Time
+	lastChallengeNotif time.Time
 }
 
 // SetNotifyFunc sets the Telegram notification callback.
@@ -66,11 +68,10 @@ func (q *BrowserQueue) notify(msg string) {
 	}
 }
 
-// NewBrowserQueue creates a shared browser queue with stealth browser + cloudscraper fallback.
+// NewBrowserQueue creates a shared persistent Chromium queue.
 // All bookingkai providers should share the same queue so requests are serialized.
 // display: X display to use (e.g. ":10"). xauthority: path to Xauthority file (optional).
-func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiumPath string, headless bool) *BrowserQueue {
-	// --- 1. Launch stealth browser ---
+func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiumPath, userDataDir string, headless bool) (*BrowserQueue, error) {
 	// Only override DISPLAY/XAUTHORITY when explicitly configured; otherwise
 	// let go-rod (and the OS environment) handle display/auth automatically.
 	if display != "" {
@@ -89,24 +90,32 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiu
 	if chromiumBin == "" {
 		chromiumBin = findChromiumBin()
 	}
+	if chromiumBin == "" {
+		return nil, fmt.Errorf("Chromium binary not found")
+	}
 	logger.Info("Using chromium binary", "path", chromiumBin)
 
 	l := launcher.New().
 		Headless(headless).
 		Bin(chromiumBin).
 		Set("disable-blink-features", "AutomationControlled").
+		Set("disable-dev-shm-usage").
 		Set("window-size", "1920,1080").
 		Set("lang", "id-ID,id,en-US,en")
+	if userDataDir != "" {
+		if err := os.MkdirAll(userDataDir, 0o700); err != nil {
+			return nil, fmt.Errorf("create Chromium user data directory: %w", err)
+		}
+		l = l.UserDataDir(userDataDir)
+	}
 
 	if os.Getuid() == 0 {
 		l = l.Set("no-sandbox")
 	}
 
 	if proxyURL != "" {
-		// Chrome works more reliably with http:// proxy, convert socks5 variants
 		chromeProxy := proxyURL
-		chromeProxy = strings.Replace(chromeProxy, "socks5h://", "http://", 1)
-		chromeProxy = strings.Replace(chromeProxy, "socks5://", "http://", 1)
+		chromeProxy = strings.Replace(chromeProxy, "socks5h://", "socks5://", 1)
 		l = l.Set("proxy-server", chromeProxy)
 		logger.Info("BookingKAI browser using proxy", "proxy", chromeProxy)
 	}
@@ -115,64 +124,52 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiu
 	var persistentPage *rod.Page
 	controlURL, err := l.Launch()
 	if err != nil {
-		logger.Warn("Failed to launch browser, will use cloudscraper only", "error", err)
-	} else {
-		browser = rod.New().ControlURL(controlURL)
-		if err := browser.Connect(); err != nil {
-			logger.Warn("Failed to connect to browser, will use cloudscraper only", "error", err)
-			browser = nil
-		} else {
-			browser.IgnoreCertErrors(true)
+		return nil, fmt.Errorf("launch Chromium: %w", err)
+	}
+	browser = rod.New().ControlURL(controlURL)
+	if err := browser.Connect(); err != nil {
+		return nil, fmt.Errorf("connect to Chromium: %w", err)
+	}
+	browser.IgnoreCertErrors(true)
 
-			// Create a persistent stealth page to retain CF cookies across requests
-			persistentPage, err = stealth.Page(browser)
-			if err != nil {
-				logger.Warn("Failed to create stealth page", "error", err)
-			} else {
-				// Warm up: navigate to homepage to acquire cf_clearance cookie
-				logger.Info("Warming up browser — visiting booking.kai.id homepage...")
-				warmCtx, warmCancel := context.WithTimeout(context.Background(), 60*time.Second)
-				warmPage := persistentPage.Context(warmCtx)
-				if navErr := warmPage.Navigate("https://booking.kai.id/"); navErr != nil {
-					logger.Warn("Warmup navigation failed", "error", navErr)
-				} else {
-					_ = warmPage.WaitLoad()
-					// Wait for Cloudflare challenge to auto-resolve
-					for i := 0; i < 15; i++ {
-						time.Sleep(2 * time.Second)
-						htmlContent, _ := warmPage.HTML()
-						if !isCloudflareChallenge(htmlContent) {
-							logger.Info("✅ Browser warmup complete — CF cookies acquired")
-							break
-						}
-						logger.Debug("Warmup: waiting for CF challenge...", "attempt", i+1)
-					}
-				}
-				warmCancel()
+	// Create a persistent page to retain cookies across requests.
+	persistentPage, err = stealth.Page(browser)
+	if err != nil {
+		_ = browser.Close()
+		return nil, fmt.Errorf("create Chromium page: %w", err)
+	}
+	// Warm up the persistent session before accepting queue jobs.
+	logger.Info("Warming up browser — visiting booking.kai.id homepage...")
+	warmCtx, warmCancel := context.WithTimeout(context.Background(), 60*time.Second)
+	warmPage := persistentPage.Context(warmCtx)
+	if navErr := warmPage.Navigate("https://booking.kai.id/"); navErr != nil {
+		logger.Warn("Warmup navigation failed", "error", navErr)
+	} else {
+		_ = warmPage.WaitLoad()
+		for i := 0; i < 15; i++ {
+			time.Sleep(2 * time.Second)
+			htmlContent, _ := warmPage.HTML()
+			if !isCloudflareChallenge(htmlContent) {
+				logger.Info("✅ Browser warmup complete")
+				break
 			}
+			logger.Debug("Warmup: waiting for challenge...", "attempt", i+1)
 		}
 	}
-
-	// --- 2. Initialize cloudscraper (JA3 spoofing) ---
-	scraper, err := cloudscraper.Init(false, false)
-	if err != nil {
-		logger.Warn("Failed to init cloudscraper", "error", err)
-		scraper = nil
-	}
+	warmCancel()
 
 	q := &BrowserQueue{
 		logger:   logger,
 		proxyURL: proxyURL,
 		browser:  browser,
 		page:     persistentPage,
-		scraper:  scraper,
 		jobs:     make(chan Job, 64),
 		done:     make(chan struct{}),
 	}
 	go q.worker()
 	logger.Info("BookingKAI queue started",
-		"browser", browser != nil,
-		"cloudscraper", scraper != nil,
+		"headless", headless,
+		"user_data_dir", userDataDir,
 		"proxy", proxyURL)
 
 	// Verify proxy IP if proxy is configured
@@ -180,7 +177,7 @@ func NewBrowserQueue(logger *slog.Logger, proxyURL, display, xauthority, chromiu
 		checkProxyIP(logger, proxyURL)
 	}
 
-	return q
+	return q, nil
 }
 
 func findChromiumBin() string {
@@ -268,52 +265,49 @@ func (q *BrowserQueue) worker() {
 	}
 }
 
-// doFetch tries multiple methods in order:
-// 1. Plain HTTP request (fastest, lightweight)
-// 2. Cloudscraper (JA3 spoofing)
-// 3. Curl with impersonated TLS fingerprint
-// 4. Stealth browser (last resort, heaviest)
-// Returns trains, the method that succeeded, and any error.
+// doFetch uses Chromium as BookingKAI's only fetch adapter.
 func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.Train, string, error) {
-	var lastErr error
-
-	// 1. Try plain HTTP request with proxy
-	trains, err := q.fetchViaHTTP(ctx, searchURL)
-	if err == nil {
-		return trains, "http", nil
+	if time.Now().Before(q.nextChallengeRetry) {
+		return nil, "browser", fmt.Errorf("BookingKAI challenge backoff active until %s", q.nextChallengeRetry.Format(time.RFC3339))
 	}
-	q.logger.Warn("HTTP fetch failed", "error", err)
-	lastErr = err
 
-	// 2. Cloudscraper (JA3 spoofing)
-	if q.scraper != nil {
-		trains, err = q.fetchViaCloudscraper(searchURL)
-		if err == nil {
-			return trains, "cloudscraper", nil
+	fetch := q.browserFetch
+	if fetch == nil {
+		fetch = q.fetchViaBrowser
+	}
+	trains, err := fetch(ctx, searchURL)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "cloudflare") || strings.Contains(strings.ToLower(err.Error()), "captcha") {
+			q.recordChallenge(err)
 		}
-		q.logger.Warn("Cloudscraper fetch failed", "error", err)
-		lastErr = err
+		return nil, "browser", err
 	}
+	q.challengeFailures = 0
+	q.nextChallengeRetry = time.Time{}
+	return trains, "browser", nil
+}
 
-	// 3. Curl (impersonated TLS fingerprint)
-	trains, err = q.fetchViaCurl(ctx, searchURL)
-	if err == nil {
-		return trains, "curl", nil
+func (q *BrowserQueue) recordChallenge(cause error) {
+	q.challengeFailures++
+	q.nextChallengeRetry = time.Now().Add(challengeBackoff(q.challengeFailures))
+	if time.Since(q.lastChallengeNotif) >= 15*time.Minute {
+		q.notify(fmt.Sprintf("⚠️ BookingKAI terkena challenge. Intervensi manual mungkin diperlukan. Retry setelah %s. Error: %v", q.nextChallengeRetry.Format(time.RFC3339), cause))
+		q.lastChallengeNotif = time.Now()
 	}
-	q.logger.Warn("Curl fetch failed", "error", err)
-	lastErr = err
+}
 
-	// 4. Last resort: stealth browser
-	if q.browser != nil {
-		trains, err = q.fetchViaBrowser(ctx, searchURL)
-		if err == nil {
-			return trains, "browser", nil
-		}
-		q.logger.Warn("Browser fetch failed", "error", err)
-		lastErr = err
+func challengeBackoff(attempt int) time.Duration {
+	if attempt < 1 {
+		attempt = 1
 	}
-
-	return nil, "", fmt.Errorf("all fetch methods failed, last error: %w", lastErr)
+	delay := 30 * time.Second
+	for i := 1; i < attempt && delay < 15*time.Minute; i++ {
+		delay *= 2
+	}
+	if delay > 15*time.Minute {
+		return 15 * time.Minute
+	}
+	return delay
 }
 
 // fetchViaCurl uses curl_chrome116 to fetch the page with a real TLS fingerprint.
@@ -490,52 +484,14 @@ func (q *BrowserQueue) fetchViaBrowser(ctx context.Context, searchURL string) ([
 		return nil, fmt.Errorf("failed to get page HTML: %w", err)
 	}
 
-	// Check for Cloudflare challenge — wait up to 5 minutes for manual solve
+	// Headless mode cannot solve interactive challenges. Return immediately so
+	// the queue can apply bounded backoff without blocking other jobs.
 	if isCloudflareChallenge(htmlContent) {
-		q.logger.Warn("Cloudflare challenge detected — waiting up to 5 minutes for manual solve",
-			"instruction", "open chromium-browser --no-sandbox on your RDP session and solve the challenge")
-
-		for i := 0; i < 100; i++ {
-			time.Sleep(3 * time.Second)
-
-			htmlContent, err = page.HTML()
-			if err != nil {
-				return nil, fmt.Errorf("failed to get page HTML during CF wait: %w", err)
-			}
-
-			if !isCloudflareChallenge(htmlContent) {
-				q.logger.Info("Cloudflare challenge resolved!")
-				q.notify("✅ Cloudflare challenge berhasil di-solve! App melanjutkan scraping.")
-				break
-			}
-			if i%10 == 9 {
-				q.logger.Info("Still waiting for Cloudflare challenge to be solved...", "elapsed", fmt.Sprintf("%ds", (i+1)*3))
-			}
-		}
-
-		if isCloudflareChallenge(htmlContent) {
-			return nil, fmt.Errorf("blocked by Cloudflare challenge (timeout after 5 minutes)")
-		}
+		return nil, fmt.Errorf("blocked by Cloudflare challenge or CAPTCHA; manual intervention required")
 	}
 
 	if strings.Contains(htmlContent, "cfwaitingroom") || strings.Contains(htmlContent, "Waiting Room") {
-		// Wait for the waiting room to clear
-		q.logger.Info("Cloudflare Waiting Room detected, waiting...")
-		for i := 0; i < 20; i++ {
-			time.Sleep(3 * time.Second)
-			htmlContent, err = page.HTML()
-			if err != nil {
-				break
-			}
-			if !strings.Contains(htmlContent, "cfwaitingroom") && !strings.Contains(htmlContent, "Waiting Room") {
-				q.logger.Info("Waiting Room cleared!")
-				break
-			}
-			q.logger.Debug("Still in Waiting Room...", "attempt", i+1)
-		}
-		if strings.Contains(htmlContent, "cfwaitingroom") || strings.Contains(htmlContent, "Waiting Room") {
-			return nil, fmt.Errorf("blocked by Cloudflare Waiting Room (timeout)")
-		}
+		return nil, fmt.Errorf("blocked by Cloudflare Waiting Room; retry later")
 	}
 
 	trains, err := parseHTML(htmlContent)

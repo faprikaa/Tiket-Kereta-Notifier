@@ -90,6 +90,7 @@ type BrowserConfig struct {
 	XAuthority   string `yaml:"xauthority"`     // Path to Xauthority file (auto-detected if empty)
 	ChromiumPath string `yaml:"chromium_path"`  // Path to chromium binary (auto-detected if empty)
 	Headless     bool   `yaml:"headless"`       // Run browser in headless mode (default: false)
+	UserDataDir  string `yaml:"user_data_dir"`  // Persistent Chromium profile directory
 }
 
 // Config represents the full application configuration

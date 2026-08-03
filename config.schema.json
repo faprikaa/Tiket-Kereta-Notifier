@@ -33,6 +33,35 @@
         }
       }
     },
+    "browser": {
+      "type": "object",
+      "description": "Chromium settings for the BookingKAI provider",
+      "properties": {
+        "headless": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run Chromium without a visible display"
+        },
+        "chromium_path": {
+          "type": "string",
+          "default": "",
+          "description": "Explicit Chromium binary path; empty enables auto-detection"
+        },
+        "user_data_dir": {
+          "type": "string",
+          "default": ".cache/tiket-kereta-notifier/chromium",
+          "description": "Persistent Chromium profile directory"
+        },
+        "display": {
+          "type": "string",
+          "description": "Optional legacy X display for non-headless operation"
+        },
+        "xauthority": {
+          "type": "string",
+          "description": "Optional legacy Xauthority path"
+        }
+      }
+    },
     "trains": {
       "type": "array",
       "minItems": 1,

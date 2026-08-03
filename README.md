@@ -20,35 +20,30 @@ Bot Telegram untuk monitoring ketersediaan tiket kereta api dari TiketKai, Trave
 
 ## Installation
 
+Target yang didukung oleh installer otomatis adalah Ubuntu `amd64`.
+
 ```bash
-git clone https://github.com/yourusername/Tiket-Kereta-Notifier.git
+git clone https://github.com/faprikaa/Tiket-Kereta-Notifier.git
 cd Tiket-Kereta-Notifier
-go mod tidy
+chmod +x scripts/setup-ubuntu.sh
+./scripts/setup-ubuntu.sh
+cp config.yml.example config.yml
 ```
 
-### Dependencies
+Installer bersifat idempotent: dependency yang sudah kompatibel akan dipakai
+kembali. Untuk memeriksa kesiapan host tanpa mengubah apa pun:
 
-**Cloudflared** (untuk webhook mode):
 ```bash
-# Windows
-scoop install cloudflared
-# atau
-winget install Cloudflare.cloudflared
-
-# macOS
-brew install cloudflared
-
-# Linux / Manual
-# Download dari https://github.com/cloudflare/cloudflared/releases
+./scripts/setup-ubuntu.sh --check
 ```
 
-**curl-impersonate** (untuk Tiket.com provider):
-```bash
-# Download dari https://github.com/lwthiker/curl-impersonate/releases
-# Pastikan curl_chrome110 ada di PATH
-```
+Setup memasang Chromium, `curl`, `curl_chrome110`, `cloudflared`, Go yang
+sesuai dengan `go.mod`, library sistem, font, dan `tmux`, lalu membangun binary
+ke `bin/tiket-kereta-notifier`. Setup tidak memasang WARP, Docker, atau systemd.
 
-> **Note:** BookingKAI provider menggunakan Chrome (go-rod) untuk bypass Cloudflare. Secara default memakai Chromium yang terinstall di sistem (`/usr/bin/chromium-browser`, dll). Pastikan Chromium sudah terinstall, atau set `chromium_path` secara eksplisit.
+> **Note:** BookingKAI langsung memakai Chromium headless. CAPTCHA atau
+> challenge interaktif tidak dipecahkan otomatis; bot melakukan backoff,
+> mengirim notifikasi Telegram, dan mungkin membutuhkan intervensi manual.
 
 ## Configuration
 
@@ -66,10 +61,11 @@ webhook:
 # Konfigurasi browser untuk BookingKAI provider (opsional)
 # Semua field opsional — kosong = pakai default sistem/go-rod
 browser:
-  chromium_path: ""   # Path ke chromium binary. Kosong = auto-detect dari PATH sistem
-  display: ""         # X display, misal ":10" (untuk server Linux tanpa GUI). Kosong = tidak di-set
-  xauthority: ""      # Path ke Xauthority file. Kosong = tidak di-set
-  headless: false     # true = headless mode (tidak butuh X display)
+  chromium_path: ""   # Kosong = auto-detect dari PATH sistem
+  user_data_dir: ".cache/tiket-kereta-notifier/chromium"
+  display: ""         # Legacy non-headless; kosong untuk headless
+  xauthority: ""      # Legacy non-headless; kosong untuk headless
+  headless: true
 
 trains:
   # Monitor kereta spesifik via banyak provider
@@ -159,12 +155,17 @@ trains:
 ## Usage
 
 ```bash
-# Pakai config.yml default
-go run cmd/main.go
+# Jalankan dalam tmux
+tmux new -s tiket-bot
+./bin/tiket-kereta-notifier -config config.yml
 
-# Pakai custom config file
-go run cmd/main.go -config production.yml
-go run cmd/main.go -c myconfig.yml
+# Detach: Ctrl-b lalu d
+# Pasang kembali sesi:
+tmux attach -t tiket-bot
+
+# Hentikan dari dalam sesi: Ctrl-c
+# Atau dari terminal lain:
+tmux kill-session -t tiket-bot
 ```
 
 ## Telegram Commands
@@ -228,7 +229,7 @@ go run cmd/main.go -c myconfig.yml
 | **tiketkai** | TiketKai.com | AES encrypted |
 | **traveloka** | Traveloka.com | Direct JSON |
 | **tiketcom** | Tiket.com | Butuh curl_chrome110, support proxy |
-| **bookingkai** | booking.kai.id | Official KAI, Chrome (go-rod), Cloudflare bypass, shared queue (serial), support proxy, filter jam berangkat |
+| **bookingkai** | booking.kai.id | Official KAI, Chromium headless langsung, persistent profile, shared queue (serial), support proxy, filter jam berangkat |
 
 ## Troubleshooting
 
@@ -238,10 +239,11 @@ Pastikan nama kereta sesuai dengan yang tampil di provider. Atau gunakan `name: 
 ### Tiket.com blocked by Turnstile
 Gunakan proxy via `proxy_url` atau pastikan `curl_chrome110` terinstall.
 
-### BookingKAI: Missing X server or $DISPLAY
-Chrome non-headless butuh X display. Pilih salah satu:
-- Set `browser.headless: true` di config (tidak butuh X server)
-- Atau jalankan Xvfb dan set `browser.display: ":10"` di config
+### BookingKAI: Cloudflare challenge atau CAPTCHA
+BookingKAI berjalan headless dan tidak memecahkan CAPTCHA secara otomatis. Bot
+akan mengirim notifikasi Telegram dan menunda retry dengan exponential backoff.
+Gunakan `browser.user_data_dir` yang persisten agar sesi Chromium dapat dipakai
+kembali setelah restart.
 
 ### Tunnel not accessible
 Pastikan `cloudflared` terinstall dan `webhook.enabled: true`.

@@ -15,6 +15,7 @@ import (
 	"tiket-kereta-notifier/internal/bot"
 	"tiket-kereta-notifier/internal/common"
 	"tiket-kereta-notifier/internal/config"
+	"tiket-kereta-notifier/internal/preflight"
 	"tiket-kereta-notifier/internal/telegram"
 	"tiket-kereta-notifier/internal/tiketcom"
 	"tiket-kereta-notifier/internal/tiketkai"
@@ -32,6 +33,10 @@ func main() {
 	// Validate config
 	if err := cfg.Validate(); err != nil {
 		logger.Error("Config validation failed", "error", err)
+		os.Exit(1)
+	}
+	if err := preflight.Check(cfg); err != nil {
+		logger.Error("Runtime dependency check failed", "error", err)
 		os.Exit(1)
 	}
 
@@ -116,7 +121,19 @@ func initAllProviders(ctx context.Context, logger *slog.Logger, cfg *config.Conf
 	var bkQueue *bookingkai.BrowserQueue
 	for _, flat := range cfg.FlatTrains {
 		if flat.ProviderName == "bookingkai" {
-			bkQueue = bookingkai.NewBrowserQueue(logger, flat.ProxyURL, cfg.Browser.Display, cfg.Browser.XAuthority, cfg.Browser.ChromiumPath, cfg.Browser.Headless)
+			var err error
+			bkQueue, err = bookingkai.NewBrowserQueue(
+				logger,
+				flat.ProxyURL,
+				cfg.Browser.Display,
+				cfg.Browser.XAuthority,
+				cfg.Browser.ChromiumPath,
+				cfg.Browser.UserDataDir,
+				cfg.Browser.Headless,
+			)
+			if err != nil {
+				return nil, nil, fmt.Errorf("initialize BookingKAI Chromium: %w", err)
+			}
 			break
 		}
 	}
