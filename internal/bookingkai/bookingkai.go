@@ -39,7 +39,6 @@ type Provider struct {
 	history          *history.Store
 	status           *common.StatusTracker
 	queue            *BrowserQueue
-	lastErrNotify    time.Time // rate-limit error notifications
 }
 
 // NewProvider creates a new BookingKAI provider.
@@ -116,8 +115,6 @@ func formatDateIndo(date string) (string, error) {
 	month := monthNames[t.Month()]
 	return fmt.Sprintf("%02d-%s-%d", t.Day(), month, t.Year()), nil
 }
-
-
 
 // Search performs a search and returns trains matching TrainName
 func (p *Provider) Search(ctx context.Context) ([]common.Train, error) {
@@ -338,10 +335,6 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 	timer := time.NewTimer(jitteredInterval())
 	defer timer.Stop()
 
-	// Register notifyFunc to the shared queue so it can send Telegram alerts
-	// (e.g. when a Cloudflare challenge needs manual solving).
-	p.queue.SetNotifyFunc(notifyFunc)
-
 	p.Logger.Info("BookingKAI scheduler started", "interval", interval, "target", p.TrainName)
 
 	for {
@@ -372,14 +365,6 @@ func (p *Provider) StartScheduler(ctx context.Context, notifyFunc func(message s
 					Timestamp: time.Now(),
 					Error:     err.Error(),
 				})
-				// Notify Telegram for Cloudflare blocks, max once per 15 minutes
-				if strings.Contains(err.Error(), "Cloudflare") && time.Since(p.lastErrNotify) > 15*time.Minute {
-					p.lastErrNotify = time.Now()
-					notifyFunc(fmt.Sprintf(
-						"⚠️ #%d %s\n📍 %s→%s [%s]\n🚫 Gagal bypass Cloudflare — semua metode diblokir\n📋 %s",
-						p.Index, p.TrainName, p.Origin, p.Destination, p.Date, err.Error(),
-					))
-				}
 				continue
 			}
 

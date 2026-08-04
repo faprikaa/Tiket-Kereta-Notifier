@@ -51,21 +51,8 @@ type BrowserQueue struct {
 	browserFetch       func(context.Context, string) ([]common.Train, error)
 	jobs               chan Job
 	done               chan struct{}
-	notifyFunc         func(string)
 	challengeFailures  int
 	nextChallengeRetry time.Time
-	lastChallengeNotif time.Time
-}
-
-// SetNotifyFunc sets the Telegram notification callback.
-func (q *BrowserQueue) SetNotifyFunc(fn func(string)) {
-	q.notifyFunc = fn
-}
-
-func (q *BrowserQueue) notify(msg string) {
-	if q.notifyFunc != nil {
-		q.notifyFunc(msg)
-	}
 }
 
 // NewBrowserQueue creates a shared persistent Chromium queue.
@@ -287,13 +274,9 @@ func (q *BrowserQueue) doFetch(ctx context.Context, searchURL string) ([]common.
 	return trains, "browser", nil
 }
 
-func (q *BrowserQueue) recordChallenge(cause error) {
+func (q *BrowserQueue) recordChallenge(_ error) {
 	q.challengeFailures++
 	q.nextChallengeRetry = time.Now().Add(challengeBackoff(q.challengeFailures))
-	if time.Since(q.lastChallengeNotif) >= 15*time.Minute {
-		q.notify(fmt.Sprintf("⚠️ BookingKAI terkena challenge. Intervensi manual mungkin diperlukan. Retry setelah %s. Error: %v", q.nextChallengeRetry.Format(time.RFC3339), cause))
-		q.lastChallengeNotif = time.Now()
-	}
 }
 
 func challengeBackoff(attempt int) time.Duration {
