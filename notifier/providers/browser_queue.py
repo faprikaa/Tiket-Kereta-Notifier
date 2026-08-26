@@ -85,6 +85,7 @@ class BrowserQueue:
             "--disable-dev-shm-usage",  # avoid renderer crashes on VPS with a tiny /dev/shm
             "--disable-gpu",
             "--window-size=1920,1080",
+            "--no-sandbox=True"
         ]
         if proxy_url:
             chrome_proxy = proxy_url.replace("socks5h://", "socks5://", 1)
