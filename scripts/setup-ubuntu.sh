@@ -3,8 +3,7 @@ set -Eeuo pipefail
 
 readonly CLOUDFLARED_VERSION="2026.7.2"
 readonly CLOUDFLARED_SHA256="ec905ea7b7e327ff8abdde8cb64697a2152de74dbcdbf6aec9db8364eb3886cd"
-readonly CURL_IMPERSONATE_VERSION="0.6.1"
-readonly CURL_IMPERSONATE_SHA256="fa1e1614f7ba69ccc66721a0f38be457a3647eb64c75d66974b56186e3316b12"
+readonly PYTHON_MIN="3.10"
 
 MODE="install"
 if [[ "${1:-}" == "--check" ]]; then
@@ -15,7 +14,6 @@ elif [[ $# -gt 0 ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
-GO_REQUIRED="$(awk '/^go / { print $2; exit }' "$ROOT_DIR/go.mod")"
 SUDO=()
 if [[ ${EUID} -ne 0 ]]; then
   SUDO=(sudo)
@@ -47,11 +45,9 @@ find_chromium() {
   return 1
 }
 
-go_is_compatible() {
-  has go || return 1
-  local installed
-  installed="$(go env GOVERSION 2>/dev/null | sed 's/^go//')"
-  [[ -n "$installed" ]] && dpkg --compare-versions "$installed" ge "$GO_REQUIRED"
+python_is_compatible() {
+  has python3 || return 1
+  python3 -c "import sys; sys.exit(0 if sys.version_info >= tuple(map(int, '$PYTHON_MIN'.split('.'))) else 1)"
 }
 
 report_status() {
@@ -64,7 +60,7 @@ report_status() {
   fi
 
   local command_name
-  for command_name in curl cloudflared curl_chrome110 tmux; do
+  for command_name in cloudflared tmux; do
     if has "$command_name"; then
       log "$command_name: $(command -v "$command_name")"
     else
@@ -73,12 +69,20 @@ report_status() {
     fi
   done
 
-  if go_is_compatible; then
-    log "Go: $(go env GOVERSION) ($(command -v go))"
+  if python_is_compatible; then
+    log "Python: $(python3 --version) ($(command -v python3))"
   else
-    log "Go >= $GO_REQUIRED: MISSING"
+    log "Python >= $PYTHON_MIN: MISSING"
     missing=1
   fi
+
+  if [[ -d "$ROOT_DIR/.venv" ]] && "$ROOT_DIR/.venv/bin/python" -c "import nodriver, httpx, curl_cffi, aiohttp, bs4, yaml, cryptography" >/dev/null 2>&1; then
+    log "Python venv dependencies: OK ($ROOT_DIR/.venv)"
+  else
+    log "Python venv dependencies: MISSING"
+    missing=1
+  fi
+
   return "$missing"
 }
 
@@ -93,8 +97,8 @@ install_apt_dependencies() {
   log "Installing Ubuntu packages"
   "${SUDO[@]}" apt-get update
   "${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    build-essential ca-certificates curl fonts-liberation libnss3 \
-    nss-plugin-pem tar tmux xz-utils chromium-browser
+    ca-certificates curl fonts-liberation libnss3 nss-plugin-pem \
+    tmux chromium-browser python3 python3-venv python3-pip
 }
 
 install_cloudflared() {
@@ -108,34 +112,15 @@ install_cloudflared() {
   rm -f "$tmp"
 }
 
-install_curl_impersonate() {
-  has curl_chrome110 && return
-  local tmp_dir archive
-  tmp_dir="$(mktemp -d)"
-  archive="$tmp_dir/curl-impersonate.tar.gz"
-  download_verified \
-    "https://github.com/lwthiker/curl-impersonate/releases/download/v${CURL_IMPERSONATE_VERSION}/curl-impersonate-v${CURL_IMPERSONATE_VERSION}.x86_64-linux-gnu.tar.gz" \
-    "$CURL_IMPERSONATE_SHA256" "$archive"
-  tar -xzf "$archive" -C "$tmp_dir"
-  "${SUDO[@]}" install -m 0755 "$tmp_dir"/curl-impersonate-* /usr/local/bin/
-  "${SUDO[@]}" install -m 0755 "$tmp_dir"/curl_* /usr/local/bin/
-  rm -rf "$tmp_dir"
-}
-
-install_go() {
-  go_is_compatible && return
-  local tmp_dir archive checksum install_dir
-  tmp_dir="$(mktemp -d)"
-  archive="$tmp_dir/go.tar.gz"
-  install_dir="/opt/go/$GO_REQUIRED"
-  checksum="$(curl --fail --location --silent --show-error "https://go.dev/dl/go${GO_REQUIRED}.linux-amd64.tar.gz.sha256")"
-  download_verified "https://go.dev/dl/go${GO_REQUIRED}.linux-amd64.tar.gz" "$checksum" "$archive"
-  "${SUDO[@]}" mkdir -p "$install_dir"
-  "${SUDO[@]}" tar -xzf "$archive" --strip-components=1 -C "$install_dir"
-  "${SUDO[@]}" ln -sfn "$install_dir/bin/go" /usr/local/bin/go
-  "${SUDO[@]}" ln -sfn "$install_dir/bin/gofmt" /usr/local/bin/gofmt
-  rm -rf "$tmp_dir"
-  hash -r
+setup_venv() {
+  cd "$ROOT_DIR"
+  if [[ ! -d .venv ]]; then
+    log "Creating virtualenv at .venv"
+    python3 -m venv .venv
+  fi
+  log "Installing Python dependencies (requirements.txt)"
+  .venv/bin/pip install --upgrade pip -q
+  .venv/bin/pip install -r requirements.txt -q
 }
 
 require_supported_host
@@ -147,15 +132,8 @@ fi
 
 install_apt_dependencies
 install_cloudflared
-install_curl_impersonate
-install_go
-
-cd "$ROOT_DIR"
-log "Downloading Go modules"
-go mod download
-mkdir -p bin
-log "Building bin/tiket-kereta-notifier"
-go build -o bin/tiket-kereta-notifier ./cmd
+setup_venv
 
 report_status || fail "setup completed with missing dependencies"
-log "Setup complete. Edit config.yml, then run the bot in tmux."
+log "Setup complete. Edit config.yml, then run:"
+log "  .venv/bin/python main.py -c config.yml"

@@ -37,12 +37,25 @@ kembali. Untuk memeriksa kesiapan host tanpa mengubah apa pun:
 ./scripts/setup-ubuntu.sh --check
 ```
 
-Setup memasang Chromium, `curl`, `curl_chrome110`, `cloudflared`, Go yang
-sesuai dengan `go.mod`, library sistem, font, dan `tmux`, lalu membangun binary
-ke `bin/tiket-kereta-notifier`. Setup tidak memasang WARP, Docker, atau systemd.
+Setup memasang Chromium, `cloudflared`, Python 3.10+, library sistem, font,
+dan `tmux`, lalu membuat virtualenv di `.venv/` dan menginstall dependency
+Python dari `requirements.txt`. Setup tidak memasang WARP, Docker, atau
+systemd.
 
-> **Note:** BookingKAI langsung memakai Chromium headless. CAPTCHA atau
-> challenge interaktif tidak dipecahkan otomatis; bot melakukan backoff,
+Tanpa installer (misal di macOS/dev machine), cukup:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+cp config.yml.example config.yml
+```
+
+> **Note:** BookingKAI memakai Chromium headless dikendalikan lewat
+> [nodriver](https://github.com/ultrafunkamsterdam/nodriver) — otomasi
+> berbasis Chrome DevTools Protocol murni (tanpa Selenium/WebDriver), jadi
+> tidak meninggalkan sinyal `navigator.webdriver` yang biasa dideteksi
+> Cloudflare, dan bisa lolos managed challenge tanpa proxy pada banyak kasus.
+> CAPTCHA interaktif tetap tidak dipecahkan otomatis; bot melakukan backoff,
 > mengirim notifikasi Telegram, dan mungkin membutuhkan intervensi manual.
 
 ## Configuration
@@ -59,12 +72,10 @@ webhook:
   port: 8080
 
 # Konfigurasi browser untuk BookingKAI provider (opsional)
-# Semua field opsional — kosong = pakai default sistem/go-rod
+# Semua field opsional — kosong = pakai default sistem/nodriver
 browser:
   chromium_path: ""   # Kosong = auto-detect dari PATH sistem
   user_data_dir: ".cache/tiket-kereta-notifier/chromium"
-  display: ""         # Legacy non-headless; kosong untuk headless
-  xauthority: ""      # Legacy non-headless; kosong untuk headless
   headless: true
 
 trains:
@@ -157,7 +168,7 @@ trains:
 ```bash
 # Jalankan dalam tmux
 tmux new -s tiket-bot
-./bin/tiket-kereta-notifier -config config.yml
+.venv/bin/python main.py -c config.yml
 
 # Detach: Ctrl-b lalu d
 # Pasang kembali sesi:
@@ -228,8 +239,8 @@ tmux kill-session -t tiket-bot
 |----------|-----|-------|
 | **tiketkai** | TiketKai.com | AES encrypted |
 | **traveloka** | Traveloka.com | Direct JSON |
-| **tiketcom** | Tiket.com | Butuh curl_chrome110, support proxy |
-| **bookingkai** | booking.kai.id | Official KAI, Chromium headless langsung, persistent profile, shared queue (serial), support proxy, filter jam berangkat |
+| **tiketcom** | Tiket.com | TLS/JA3 impersonation via [curl_cffi](https://github.com/lexiforest/curl_cffi) (pip package, tanpa binary eksternal), support proxy |
+| **bookingkai** | booking.kai.id | Official KAI, Chromium headless via [nodriver](https://github.com/ultrafunkamsterdam/nodriver) (CDP murni, undetected), persistent profile, shared queue (serial), support proxy, filter jam berangkat |
 
 ## Troubleshooting
 
@@ -237,12 +248,15 @@ tmux kill-session -t tiket-bot
 Pastikan nama kereta sesuai dengan yang tampil di provider. Atau gunakan `name: "any"` sementara untuk melihat daftar kereta yang tersedia di rute tersebut.
 
 ### Tiket.com blocked by Turnstile
-Gunakan proxy via `proxy_url` atau pastikan `curl_chrome110` terinstall.
+Gunakan proxy via `proxy_url`. `curl_cffi` (dipasang otomatis lewat
+`requirements.txt`) sudah meniru TLS/JA3 fingerprint Chrome, jadi biasanya
+lolos tanpa proxy — proxy baru dibutuhkan kalau IP-nya sendiri sudah ke-flag.
 
 ### BookingKAI: Cloudflare challenge atau CAPTCHA
-BookingKAI berjalan headless dan tidak memecahkan CAPTCHA secara otomatis. Bot
-akan mengirim notifikasi Telegram dan menunda retry dengan exponential backoff.
-Gunakan `browser.user_data_dir` yang persisten agar sesi Chromium dapat dipakai
+BookingKAI berjalan headless lewat nodriver dan tidak memecahkan CAPTCHA
+interaktif secara otomatis. Bot akan mengirim notifikasi Telegram dan menunda
+retry dengan exponential backoff. Gunakan `browser.user_data_dir` yang
+persisten agar sesi Chromium (termasuk cookie `cf_clearance`) dapat dipakai
 kembali setelah restart.
 
 ### Tunnel not accessible

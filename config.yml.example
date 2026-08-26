@@ -10,13 +10,12 @@ webhook:
   enabled: true
   port: 8080
 
-# Konfigurasi Chromium untuk provider bookingkai
+# Konfigurasi Chromium untuk provider bookingkai (via nodriver, murni CDP —
+# tanpa WebDriver — jadi tidak butuh X display bahkan saat headless: false)
 browser:
   headless: true
   chromium_path: ""                          # Kosong = auto-detect dari PATH
   user_data_dir: ".cache/tiket-kereta-notifier/chromium"
-  display: ""                                # Opsional untuk mode non-headless lama
-  xauthority: ""                             # Opsional untuk mode non-headless lama
 
 trains:
   # Satu entry per kereta, bisa punya banyak provider

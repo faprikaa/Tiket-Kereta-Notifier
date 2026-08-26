@@ -51,14 +51,6 @@
           "type": "string",
           "default": ".cache/tiket-kereta-notifier/chromium",
           "description": "Persistent Chromium profile directory"
-        },
-        "display": {
-          "type": "string",
-          "description": "Optional legacy X display for non-headless operation"
-        },
-        "xauthority": {
-          "type": "string",
-          "description": "Optional legacy Xauthority path"
         }
       }
     },

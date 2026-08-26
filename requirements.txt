@@ -1,0 +1,7 @@
+PyYAML>=6.0
+httpx[socks]>=0.27
+cryptography>=42.0
+curl_cffi>=0.7
+nodriver>=0.36
+beautifulsoup4>=4.12
+aiohttp>=3.9

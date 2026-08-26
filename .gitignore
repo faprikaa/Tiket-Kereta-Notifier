@@ -4,3 +4,9 @@ cmd.exe
 cloudflared.exe
 main.exe
 config.yml
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.cache/
