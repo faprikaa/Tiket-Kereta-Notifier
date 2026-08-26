@@ -78,6 +78,7 @@ class BrowserQueue:
         browser_args = [
             "--disable-blink-features=AutomationControlled",
             "--window-size=1920,1080",
+            "--no-sandbox=True"
         ]
         if proxy_url:
             chrome_proxy = proxy_url.replace("socks5h://", "socks5://", 1)
