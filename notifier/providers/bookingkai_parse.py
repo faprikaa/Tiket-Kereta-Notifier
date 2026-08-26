@@ -10,7 +10,14 @@ from ..models import Train
 def is_cloudflare_challenge(html: str) -> bool:
     return any(
         marker in html
-        for marker in ("cf_chl_opt", "challenge-platform", "Just a moment", "cf-browser-verification")
+        for marker in (
+            "cf_chl_opt", "challenge-platform", "Just a moment", "cf-browser-verification",
+            # Cloudflare's WAF "Access Denied" block page (distinct from the
+            # interactive JS challenge above) — seen mid-session even after a
+            # clean homepage warmup, most often triggered by the exit IP's
+            # reputation (e.g. a flagged/shared proxy) rather than fingerprinting.
+            "Attention Required!", "cf-error-details", "Sorry, you have been blocked",
+        )
     )
 
 
