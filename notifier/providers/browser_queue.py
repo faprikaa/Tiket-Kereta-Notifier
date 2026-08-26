@@ -28,10 +28,15 @@ from ..models import Train
 from .bookingkai_parse import is_cloudflare_challenge, is_waiting_room, parse_trains
 
 CHROMIUM_CANDIDATES = (
-    "chromium-browser",
-    "chromium",
-    "google-chrome",
+    # google-chrome-stable/google-chrome checked first: on Ubuntu 22.04+,
+    # `apt install chromium-browser` installs a snap trampoline script, not a
+    # real binary — launching it headlessly over CDP as root routinely fails
+    # with "Failed to connect to browser" due to snap confinement. A real
+    # Chrome/Chromium .deb doesn't have that problem.
     "google-chrome-stable",
+    "google-chrome",
+    "chromium",
+    "chromium-browser",
 )
 
 
@@ -77,6 +82,8 @@ class BrowserQueue:
 
         browser_args = [
             "--disable-blink-features=AutomationControlled",
+            "--disable-dev-shm-usage",  # avoid renderer crashes on VPS with a tiny /dev/shm
+            "--disable-gpu",
             "--window-size=1920,1080",
         ]
         if proxy_url:
@@ -88,14 +95,24 @@ class BrowserQueue:
             Path(user_data_dir).mkdir(parents=True, exist_ok=True)
 
         logger.info("Launching browser headless=%s", headless)
-        q._browser = await nodriver.start(
-            headless=headless,
-            browser_executable_path=chromium_bin,
-            user_data_dir=user_data_dir or None,
-            browser_args=browser_args,
-            lang="id-ID",
-            sandbox=False,
-        )
+        try:
+            q._browser = await nodriver.start(
+                headless=headless,
+                browser_executable_path=chromium_bin,
+                user_data_dir=user_data_dir or None,
+                browser_args=browser_args,
+                lang="id-ID",
+                sandbox=False,
+            )
+        except Exception as e:
+            raise RuntimeError(
+                f"failed to launch browser at '{chromium_bin}': {e}\n"
+                "If this binary is 'chromium-browser'/'chromium' installed via apt on "
+                "Ubuntu 22.04+, it is likely a snap trampoline script rather than a real "
+                "binary, which frequently fails to launch headlessly as root. Install "
+                "google-chrome-stable instead (see scripts/setup-ubuntu.sh) or set "
+                "browser.chromium_path to a real Chrome/Chromium binary."
+            ) from e
         q._tab = await q._browser.get("https://booking.kai.id/")
 
         logger.info("Warming up browser — visiting booking.kai.id homepage...")

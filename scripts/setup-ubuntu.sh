@@ -36,7 +36,10 @@ require_supported_host() {
 
 find_chromium() {
   local name
-  for name in chromium-browser chromium google-chrome-stable google-chrome; do
+  # google-chrome(-stable) checked first: on Ubuntu 22.04+, `apt install
+  # chromium-browser` installs a snap trampoline script rather than a real
+  # binary, which routinely fails to launch headlessly as root.
+  for name in google-chrome-stable google-chrome chromium chromium-browser; do
     if has "$name"; then
       command -v "$name"
       return 0
@@ -97,8 +100,23 @@ install_apt_dependencies() {
   log "Installing Ubuntu packages"
   "${SUDO[@]}" apt-get update
   "${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y \
-    ca-certificates curl fonts-liberation libnss3 nss-plugin-pem \
-    tmux chromium-browser python3 python3-venv python3-pip
+    ca-certificates curl gnupg fonts-liberation libnss3 nss-plugin-pem \
+    tmux python3 python3-venv python3-pip
+}
+
+install_google_chrome() {
+  # Prefer a real Google Chrome .deb over `apt install chromium-browser`,
+  # which on Ubuntu 22.04+ is a snap trampoline script — that routinely
+  # fails to launch headlessly as root under CDP automation (nodriver).
+  find_chromium >/dev/null && return
+  log "Installing Google Chrome (stable)"
+  "${SUDO[@]}" install -d -m 0755 /etc/apt/keyrings
+  curl --fail --location --silent --show-error https://dl.google.com/linux/linux_signing_key.pub |
+    "${SUDO[@]}" gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" |
+    "${SUDO[@]}" tee /etc/apt/sources.list.d/google-chrome.list >/dev/null
+  "${SUDO[@]}" apt-get update
+  "${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y google-chrome-stable
 }
 
 install_cloudflared() {
@@ -131,6 +149,7 @@ if [[ "$MODE" == "check" ]]; then
 fi
 
 install_apt_dependencies
+install_google_chrome
 install_cloudflared
 setup_venv
 
