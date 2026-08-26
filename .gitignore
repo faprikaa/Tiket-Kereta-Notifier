@@ -10,3 +10,8 @@ config.yml
 __pycache__/
 *.pyc
 .cache/
+
+# debug output from scripts/test_bookingkai*.py
+bookingkai_debug*.html
+screen.jpg
+cf_template.png
