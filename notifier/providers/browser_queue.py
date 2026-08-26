@@ -25,7 +25,13 @@ from pathlib import Path
 import nodriver
 
 from ..models import Train
-from .bookingkai_parse import is_cloudflare_challenge, is_waiting_room, parse_trains
+from .bookingkai_parse import (
+    extract_net_error,
+    is_cloudflare_challenge,
+    is_navigation_error,
+    is_waiting_room,
+    parse_trains,
+)
 
 CHROMIUM_CANDIDATES = (
     # google-chrome-stable/google-chrome checked first: on Ubuntu 22.04+,
@@ -177,8 +183,24 @@ class BrowserQueue:
             raise RuntimeError("blocked by Cloudflare challenge or CAPTCHA; manual intervention required")
         if is_waiting_room(html):
             raise RuntimeError("blocked by Cloudflare Waiting Room; retry later")
+        if is_navigation_error(html):
+            raise RuntimeError(
+                f"browser failed to reach booking.kai.id ({extract_net_error(html)}); "
+                "if a proxy_url is configured, verify it is actually reachable from this host"
+            )
 
-        return parse_trains(html)
+        trains = parse_trains(html)
+        if not trains:
+            # Zero results can be legitimate (no service that day), but can
+            # also mean the page structure silently didn't match our
+            # selectors (layout change, unexpected intermediate page). Log
+            # enough to tell the two apart without dumping the full HTML.
+            title = await self._tab.evaluate("document.title", return_by_value=True)
+            self.logger.warning(
+                "BookingKAI: 0 trains parsed url=%s title=%r html_len=%d",
+                search_url, title, len(html),
+            )
+        return trains
 
     async def enqueue(self, search_url: str) -> tuple[list[Train], str]:
         job = _Job(search_url=search_url)

@@ -18,6 +18,22 @@ def is_waiting_room(html: str) -> bool:
     return "cfwaitingroom" in html or "Waiting Room" in html
 
 
+# Chrome's own built-in network-error page (net::ERR_*), shown when the page
+# never actually reached booking.kai.id — most commonly because a configured
+# proxy_url isn't reachable. Distinct from a Cloudflare challenge: the site
+# itself was never contacted, so this must be reported as a fetch failure
+# rather than silently parsed into "0 trains found".
+def is_navigation_error(html: str) -> bool:
+    return 'id="main-frame-error"' in html or "net::ERR_" in html
+
+
+def extract_net_error(html: str) -> str:
+    idx = html.find("net::ERR_")
+    if idx == -1:
+        return "unknown navigation error"
+    return html[idx: idx + 40].split("<")[0].strip()
+
+
 def _format_price(raw: str) -> int:
     digits = "".join(c for c in raw if c.isdigit())
     return int(digits) if digits else 0
