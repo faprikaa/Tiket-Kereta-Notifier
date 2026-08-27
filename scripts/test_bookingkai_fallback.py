@@ -75,6 +75,31 @@ async def main():
         raise AssertionError("expected backoff to block the fetch")
     assert calls == [], calls
 
+    # stage 1 walks the whole pool before giving up: one bad target must not
+    # cost a browser launch.
+    q = BrowserQueue(logging.getLogger("t"))
+    tried = []
+
+    def _once(url, target):
+        tried.append(target)
+        if target != "chrome124":
+            raise RuntimeError("HTTP 403")
+        return [TRAIN]
+
+    q._curl_once = _once
+    assert q._fetch_via_curl(URL) == [TRAIN]
+    assert tried[-1] == "chrome124", tried
+    assert set(tried) <= set(IMPERSONATE_POOL), tried
+
+    # every target failing is what escalates to stage 2
+    q._curl_once = lambda url, target: (_ for _ in ()).throw(RuntimeError("HTTP 403"))
+    try:
+        q._fetch_via_curl(URL)
+    except RuntimeError as e:
+        assert "all impersonation targets failed" in str(e), e
+    else:
+        raise AssertionError("expected an all-targets-failed error")
+
     print("ok")
 
 

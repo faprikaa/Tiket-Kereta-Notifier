@@ -150,9 +150,23 @@ class BrowserQueue:
     # --- stage 1: no browser ------------------------------------------------
 
     def _fetch_via_curl(self, search_url: str) -> list[Train]:
-        """Blocking; run via asyncio.to_thread. Raises if the page isn't usable."""
+        """Blocking; run via asyncio.to_thread. Raises if no target works.
+
+        Targets are not interchangeable in practice: the same proxy exit can
+        serve chrome124 a 200 and chrome120 a 403 minutes apart. So try the
+        whole pool in random order before paying for a browser launch.
+        """
+        errors = []
+        for impersonate in random.sample(IMPERSONATE_POOL, len(IMPERSONATE_POOL)):
+            try:
+                return self._curl_once(search_url, impersonate)
+            except Exception as e:  # noqa: BLE001
+                self.logger.debug("curl_cffi impersonate=%s failed: %s", impersonate, e)
+                errors.append(f"{impersonate}: {e}")
+        raise RuntimeError("all impersonation targets failed — " + "; ".join(errors))
+
+    def _curl_once(self, search_url: str, impersonate: str) -> list[Train]:
         proxies = {"http": self._proxy_url, "https": self._proxy_url} if self._proxy_url else None
-        impersonate = random.choice(IMPERSONATE_POOL)
         resp = cffi_requests.get(
             search_url,
             impersonate=impersonate,
@@ -165,7 +179,7 @@ class BrowserQueue:
         )
         html = resp.text
         if resp.status_code != 200:
-            raise RuntimeError(f"HTTP {resp.status_code} (impersonate={impersonate})")
+            raise RuntimeError(f"HTTP {resp.status_code}")
         _raise_if_blocked(html)
 
         trains = parse_trains(html)
