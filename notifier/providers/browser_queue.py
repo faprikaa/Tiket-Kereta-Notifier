@@ -2,7 +2,7 @@
 
 Two-stage strategy against Cloudflare on booking.kai.id, cheapest first:
 
-1. **curl_cffi impersonating chrome124** — no browser at all. It matches a
+1. **curl_cffi impersonating a real Chrome/Safari** — no browser at all. It matches a
    real Chrome's TLS/JA3 fingerprint and HTTP/2 frame ordering, which is what
    Cloudflare's first-pass bot check keys off. Measured against the live site
    this returns the full 25-train result page in well under a second, with no
@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import shutil
 import time
 from dataclasses import dataclass, field
@@ -40,10 +41,11 @@ from .bookingkai_parse import (
     parse_trains,
 )
 
-# The impersonation target verified to clear booking.kai.id. Others in the
-# curl_cffi set behave very differently against the same IP: edge101 and
-# safari15_5 get a hard 403 WAF page.
-IMPERSONATE = "chrome124"
+# Impersonation targets verified to clear booking.kai.id — all three returned
+# the same byte-identical 200 result page through the proxy. One is picked at
+# random per request. edge101 and safari15_5 are deliberately excluded: both
+# get a hard 403 WAF page from the same IP.
+IMPERSONATE_POOL = ("chrome124", "chrome120", "safari17_2_ios")
 
 CHROMIUM_CANDIDATES = (
     # Kept for scripts/test_bookingkai_*.py, which still drive Chromium
@@ -100,7 +102,8 @@ class BrowserQueue:
         q._headless = headless
         q._worker_task = asyncio.create_task(q._worker())
         logger.info(
-            "BookingKAI queue started strategy=curl_cffi(%s)->camoufox proxy=%s", IMPERSONATE, proxy_url or "(none)"
+            "BookingKAI queue started strategy=curl_cffi(%s)->camoufox proxy=%s",
+            "|".join(IMPERSONATE_POOL), proxy_url or "(none)",
         )
         return q
 
@@ -149,9 +152,10 @@ class BrowserQueue:
     def _fetch_via_curl(self, search_url: str) -> list[Train]:
         """Blocking; run via asyncio.to_thread. Raises if the page isn't usable."""
         proxies = {"http": self._proxy_url, "https": self._proxy_url} if self._proxy_url else None
+        impersonate = random.choice(IMPERSONATE_POOL)
         resp = cffi_requests.get(
             search_url,
-            impersonate=IMPERSONATE,
+            impersonate=impersonate,
             proxies=proxies,
             timeout=30,
             headers={
@@ -161,7 +165,7 @@ class BrowserQueue:
         )
         html = resp.text
         if resp.status_code != 200:
-            raise RuntimeError(f"HTTP {resp.status_code}")
+            raise RuntimeError(f"HTTP {resp.status_code} (impersonate={impersonate})")
         _raise_if_blocked(html)
 
         trains = parse_trains(html)

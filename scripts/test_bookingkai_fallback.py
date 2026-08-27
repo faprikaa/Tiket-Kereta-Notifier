@@ -8,7 +8,7 @@ import asyncio, logging, pathlib, sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from notifier.models import Train
-from notifier.providers.browser_queue import BrowserQueue
+from notifier.providers.browser_queue import IMPERSONATE_POOL, BrowserQueue
 
 URL = "https://booking.kai.id/?origination=LPN"
 TRAIN = Train(
@@ -34,6 +34,11 @@ def _boom():
 
 
 async def main():
+    # edge101 and safari15_5 both get a hard 403 from booking.kai.id — keep
+    # them out of the rotation.
+    assert IMPERSONATE_POOL, "need at least one impersonation target"
+    assert not {"edge101", "safari15_5"} & set(IMPERSONATE_POOL), IMPERSONATE_POOL
+
     # stage 1 succeeds -> browser never launched
     q, calls = _queue(lambda: [TRAIN], lambda: [])
     trains, method = await q._do_fetch(URL)

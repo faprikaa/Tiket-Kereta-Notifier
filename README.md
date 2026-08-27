@@ -50,8 +50,8 @@ python3 -m venv .venv
 cp config.yml.example config.yml
 ```
 
-> **Note:** BookingKAI memakai dua tahap: `curl_cffi` (impersonate
-> `chrome124`, tanpa browser sama sekali) lebih dulu, lalu
+> **Note:** BookingKAI memakai dua tahap: `curl_cffi` (impersonate acak dari
+> `chrome124`/`chrome120`/`safari17_2_ios`, tanpa browser sama sekali) lebih dulu, lalu
 > [Camoufox](https://github.com/daijro/camoufox) — Firefox anti-fingerprint —
 > hanya kalau tahap pertama gagal. Tahap 1 tidak menjalankan browser sama
 > sekali (cepat, hemat RAM); Camoufox baru diluncurkan saat benar-benar
@@ -242,7 +242,7 @@ tmux kill-session -t tiket-bot
 | **tiketkai** | TiketKai.com | AES encrypted |
 | **traveloka** | Traveloka.com | Direct JSON |
 | **tiketcom** | Tiket.com | TLS/JA3 impersonation via [curl_cffi](https://github.com/lexiforest/curl_cffi) (pip package, tanpa binary eksternal), support proxy |
-| **bookingkai** | booking.kai.id | Official KAI, dua tahap: `curl_cffi` impersonate `chrome124` (tanpa browser) lalu fallback [Camoufox](https://github.com/daijro/camoufox) (Firefox anti-fingerprint, lazy-launch), shared queue (serial), support proxy, filter jam berangkat |
+| **bookingkai** | booking.kai.id | Official KAI, dua tahap: `curl_cffi` impersonate acak (tanpa browser) lalu fallback [Camoufox](https://github.com/daijro/camoufox) (Firefox anti-fingerprint, lazy-launch), shared queue (serial), support proxy, filter jam berangkat |
 
 ## Troubleshooting
 
