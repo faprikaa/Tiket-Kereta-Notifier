@@ -4,10 +4,11 @@ when stage 1 fails. Needs the app deps installed — run it from the venv:
 
     .venv/bin/python scripts/test_bookingkai_fallback.py
 """
-import asyncio, logging, pathlib, sys
+import asyncio, logging, pathlib, sys, time
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from notifier.models import Train
+from notifier.providers import browser_queue as bq
 from notifier.providers.browser_queue import IMPERSONATE_POOL, BrowserQueue
 
 URL = "https://booking.kai.id/?origination=LPN"
@@ -99,6 +100,25 @@ async def main():
         assert "all impersonation targets failed" in str(e), e
     else:
         raise AssertionError("expected an all-targets-failed error")
+
+    # a resident camoufox is torn down once stage 1 works again, but not while
+    # it is still being used
+    class _CM:
+        closed = False
+
+        async def __aexit__(self, *a):
+            _CM.closed = True
+
+    q, calls = _queue(lambda: [TRAIN], lambda: [])
+    q._camoufox_cm = _CM()
+    q._browser_last_used = time.time()
+    await q._do_fetch(URL)
+    assert not _CM.closed, "browser closed while still recently used"
+
+    q._browser_last_used = time.time() - bq.BROWSER_IDLE_TIMEOUT - 1
+    await q._do_fetch(URL)
+    assert _CM.closed, "idle browser was not shut down"
+    assert q._camoufox_cm is None and q._page is None
 
     print("ok")
 

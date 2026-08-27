@@ -47,6 +47,13 @@ from .bookingkai_parse import (
 # get a hard 403 WAF page from the same IP.
 IMPERSONATE_POOL = ("chrome124", "chrome120", "safari17_2_ios")
 
+# Camoufox holds ~400-500MB, which is real money on a small VPS. Once stage 1
+# is working again there is no reason to keep it resident — shut it down after
+# this long without a stage-2 fetch. Its cf_clearance cookie is lost with it,
+# so the next fallback pays for a fresh warmup; that trade is worth it because
+# stage 2 is meant to be rare.
+BROWSER_IDLE_TIMEOUT = 600.0
+
 CHROMIUM_CANDIDATES = (
     # Kept for scripts/test_bookingkai_*.py, which still drive Chromium
     # directly. The queue itself no longer launches Chromium.
@@ -80,6 +87,7 @@ class BrowserQueue:
         self._browser = None
         self._page = None
         self._browser_lock = asyncio.Lock()
+        self._browser_last_used = 0.0
         self._jobs: asyncio.Queue[_Job | None] = asyncio.Queue()
         self._worker_task: asyncio.Task | None = None
         self._challenge_failures = 0
@@ -128,6 +136,7 @@ class BrowserQueue:
         try:
             trains = await asyncio.to_thread(self._fetch_via_curl, search_url)
             method = "curl_cffi"
+            await self._close_browser_if_idle()
         except Exception as e:  # noqa: BLE001
             self.logger.info("BookingKAI curl_cffi stage failed (%s); falling back to camoufox", e)
             try:
@@ -217,6 +226,7 @@ class BrowserQueue:
             self._camoufox_cm = AsyncCamoufox(**kwargs)
             self._browser = await self._camoufox_cm.__aenter__()
             self._page = await self._browser.new_page()
+            self._browser_last_used = time.time()
 
             self.logger.info("Camoufox warmup — visiting booking.kai.id homepage...")
             await self._page.goto("https://booking.kai.id/", timeout=60_000)
@@ -228,8 +238,24 @@ class BrowserQueue:
                 self.logger.debug("Warmup: waiting for challenge... attempt=%d", attempt + 1)
             return self._page
 
+    async def _close_browser_if_idle(self) -> None:
+        if self._camoufox_cm is None:
+            return
+        idle = time.time() - self._browser_last_used
+        if idle < BROWSER_IDLE_TIMEOUT:
+            return
+        async with self._browser_lock:
+            if self._camoufox_cm is None:
+                return
+            self.logger.info("Shutting down idle camoufox after %.0fs without a fallback fetch", idle)
+            await self._camoufox_cm.__aexit__(None, None, None)
+            self._camoufox_cm = None
+            self._browser = None
+            self._page = None
+
     async def _fetch_via_browser(self, search_url: str) -> list[Train]:
         page = await self._ensure_browser()
+        self._browser_last_used = time.time()
 
         self.logger.debug("Camoufox navigating url=%s", search_url)
         await page.goto(search_url, timeout=90_000)
@@ -238,6 +264,7 @@ class BrowserQueue:
         html = await page.content()
         _raise_if_blocked(html)
 
+        self._browser_last_used = time.time()
         trains = parse_trains(html)
         if not trains:
             # Zero results can be legitimate (no service that day), but can also
