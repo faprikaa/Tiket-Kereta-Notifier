@@ -11,7 +11,13 @@ def is_cloudflare_challenge(html: str) -> bool:
     return any(
         marker in html
         for marker in (
-            "cf_chl_opt", "challenge-platform", "Just a moment", "cf-browser-verification",
+            # ponytail: "challenge-platform" deliberately NOT a marker. Cloudflare
+            # injects /cdn-cgi/challenge-platform/.../jsd (passive JS detection)
+            # into successfully-served pages too, so matching it reported real
+            # 25-train result pages as blocked. Verified against a captured
+            # curl_cffi page: that marker hit, every real challenge/block marker
+            # missed, and the page held 25 "data-block list-kereta" entries.
+            "cf_chl_opt", "Just a moment", "cf-browser-verification",
             # Cloudflare's WAF "Access Denied" block page (distinct from the
             # interactive JS challenge above) — seen mid-session even after a
             # clean homepage warmup, most often triggered by the exit IP's

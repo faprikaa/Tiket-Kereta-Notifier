@@ -50,11 +50,12 @@ python3 -m venv .venv
 cp config.yml.example config.yml
 ```
 
-> **Note:** BookingKAI memakai Chromium headless dikendalikan lewat
-> [nodriver](https://github.com/ultrafunkamsterdam/nodriver) — otomasi
-> berbasis Chrome DevTools Protocol murni (tanpa Selenium/WebDriver), jadi
-> tidak meninggalkan sinyal `navigator.webdriver` yang biasa dideteksi
-> Cloudflare, dan bisa lolos managed challenge tanpa proxy pada banyak kasus.
+> **Note:** BookingKAI memakai dua tahap: `curl_cffi` (impersonate
+> `chrome124`, tanpa browser sama sekali) lebih dulu, lalu
+> [Camoufox](https://github.com/daijro/camoufox) — Firefox anti-fingerprint —
+> hanya kalau tahap pertama gagal. Tahap 1 tidak menjalankan browser sama
+> sekali (cepat, hemat RAM); Camoufox baru diluncurkan saat benar-benar
+> dibutuhkan dan menambal fingerprint di level C++, bukan lewat JS injection.
 > CAPTCHA interaktif tetap tidak dipecahkan otomatis; bot melakukan backoff,
 > mengirim notifikasi Telegram, dan mungkin membutuhkan intervensi manual.
 
@@ -72,7 +73,8 @@ webhook:
   port: 8080
 
 # Konfigurasi browser untuk BookingKAI provider (opsional)
-# Semua field opsional — kosong = pakai default sistem/nodriver
+# Semua field opsional. chromium_path/user_data_dir kini tidak dipakai
+# (Camoufox berbasis Firefox); dipertahankan agar config lama tetap valid.
 browser:
   chromium_path: ""   # Kosong = auto-detect dari PATH sistem
   user_data_dir: ".cache/tiket-kereta-notifier/chromium"
@@ -240,7 +242,7 @@ tmux kill-session -t tiket-bot
 | **tiketkai** | TiketKai.com | AES encrypted |
 | **traveloka** | Traveloka.com | Direct JSON |
 | **tiketcom** | Tiket.com | TLS/JA3 impersonation via [curl_cffi](https://github.com/lexiforest/curl_cffi) (pip package, tanpa binary eksternal), support proxy |
-| **bookingkai** | booking.kai.id | Official KAI, Chromium headless via [nodriver](https://github.com/ultrafunkamsterdam/nodriver) (CDP murni, undetected), persistent profile, shared queue (serial), support proxy, filter jam berangkat |
+| **bookingkai** | booking.kai.id | Official KAI, dua tahap: `curl_cffi` impersonate `chrome124` (tanpa browser) lalu fallback [Camoufox](https://github.com/daijro/camoufox) (Firefox anti-fingerprint, lazy-launch), shared queue (serial), support proxy, filter jam berangkat |
 
 ## Troubleshooting
 
@@ -253,11 +255,10 @@ Gunakan proxy via `proxy_url`. `curl_cffi` (dipasang otomatis lewat
 lolos tanpa proxy — proxy baru dibutuhkan kalau IP-nya sendiri sudah ke-flag.
 
 ### BookingKAI: Cloudflare challenge atau CAPTCHA
-BookingKAI berjalan headless lewat nodriver dan tidak memecahkan CAPTCHA
+BookingKAI berjalan headless lewat Camoufox dan tidak memecahkan CAPTCHA
 interaktif secara otomatis. Bot akan mengirim notifikasi Telegram dan menunda
-retry dengan exponential backoff. Gunakan `browser.user_data_dir` yang
-persisten agar sesi Chromium (termasuk cookie `cf_clearance`) dapat dipakai
-kembali setelah restart.
+retry dengan exponential backoff. Instance Camoufox dipertahankan hidup
+selama proses berjalan agar cookie `cf_clearance` tidak hilang antar request.
 
 ### Tunnel not accessible
 Pastikan `cloudflared` terinstall dan `webhook.enabled: true`.

@@ -1,16 +1,24 @@
-"""Shared persistent-browser queue for all BookingKAI providers.
+"""Shared fetch queue for all BookingKAI providers.
 
-Uses nodriver — a pure-CDP browser automation library (no Selenium/WebDriver
-protocol at all) — to drive a real Chromium instance against booking.kai.id.
-Because there is no webdriver layer, none of the usual `navigator.webdriver`
-/ CDP-detection signals Cloudflare looks for are present, so it clears the
-managed challenge without needing a proxy in most cases (still headless, so
-it cannot solve an interactive CAPTCHA if one is shown).
+Two-stage strategy against Cloudflare on booking.kai.id, cheapest first:
 
-All bookingkai train configs share one BrowserQueue so requests are
-serialized through a single persistent tab — this keeps Cloudflare's
-`cf_clearance` cookie alive across requests instead of re-triggering a
-challenge for every train.
+1. **curl_cffi impersonating chrome124** — no browser at all. It matches a
+   real Chrome's TLS/JA3 fingerprint and HTTP/2 frame ordering, which is what
+   Cloudflare's first-pass bot check keys off. Measured against the live site
+   this returns the full 25-train result page in well under a second, with no
+   browser process and no hundreds of MB of RAM.
+2. **Camoufox** — a hardened Firefox that patches fingerprint surfaces
+   (canvas, WebGL, fonts, audio, screen/hardware, timezone) at the C++ level
+   rather than via injected JS. Slower and heavy, so it is launched lazily on
+   the first stage-1 failure and then kept alive.
+
+A strategy sweep over 11 approaches (scripts/test_bookingkai_*.py) found only
+these two clear the site; nodriver, plain/patched Playwright across all three
+engines, and DrissionPage all got the WAF block page.
+
+All bookingkai train configs share one queue so requests are serialized —
+this keeps Cloudflare's `cf_clearance` cookie alive across requests instead of
+re-triggering a challenge for every train.
 """
 
 from __future__ import annotations
@@ -20,9 +28,8 @@ import logging
 import shutil
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 
-import nodriver
+from curl_cffi import requests as cffi_requests
 
 from ..models import Train
 from .bookingkai_parse import (
@@ -33,12 +40,14 @@ from .bookingkai_parse import (
     parse_trains,
 )
 
+# The impersonation target verified to clear booking.kai.id. Others in the
+# curl_cffi set behave very differently against the same IP: edge101 and
+# safari15_5 get a hard 403 WAF page.
+IMPERSONATE = "chrome124"
+
 CHROMIUM_CANDIDATES = (
-    # google-chrome-stable/google-chrome checked first: on Ubuntu 22.04+,
-    # `apt install chromium-browser` installs a snap trampoline script, not a
-    # real binary — launching it headlessly over CDP as root routinely fails
-    # with "Failed to connect to browser" due to snap confinement. A real
-    # Chrome/Chromium .deb doesn't have that problem.
+    # Kept for scripts/test_bookingkai_*.py, which still drive Chromium
+    # directly. The queue itself no longer launches Chromium.
     "google-chrome-stable",
     "google-chrome",
     "chromium",
@@ -63,8 +72,12 @@ class _Job:
 class BrowserQueue:
     def __init__(self, logger: logging.Logger) -> None:
         self.logger = logger
-        self._browser: nodriver.Browser | None = None
-        self._tab: nodriver.Tab | None = None
+        self._proxy_url = ""
+        self._headless = True
+        self._camoufox_cm = None
+        self._browser = None
+        self._page = None
+        self._browser_lock = asyncio.Lock()
         self._jobs: asyncio.Queue[_Job | None] = asyncio.Queue()
         self._worker_task: asyncio.Task | None = None
         self._challenge_failures = 0
@@ -79,59 +92,16 @@ class BrowserQueue:
         user_data_dir: str,
         headless: bool,
     ) -> "BrowserQueue":
+        # chromium_path/user_data_dir are accepted but unused: stage 1 needs no
+        # browser and stage 2 is Firefox-based. Kept so config and callers
+        # don't have to change.
         q = cls(logger)
-
-        chromium_bin = chromium_path or find_chromium()
-        if not chromium_bin:
-            raise RuntimeError("Chromium binary not found")
-        logger.info("Using chromium binary: %s", chromium_bin)
-
-        browser_args = [
-            "--disable-blink-features=AutomationControlled",
-            "--disable-dev-shm-usage",  # avoid renderer crashes on VPS with a tiny /dev/shm
-            "--disable-gpu",
-            "--window-size=1920,1080",
-        ]
-        if proxy_url:
-            chrome_proxy = proxy_url.replace("socks5h://", "socks5://", 1)
-            browser_args.append(f"--proxy-server={chrome_proxy}")
-            logger.info("BookingKAI browser using proxy=%s", chrome_proxy)
-
-        if user_data_dir:
-            Path(user_data_dir).mkdir(parents=True, exist_ok=True)
-
-        logger.info("Launching browser headless=%s", headless)
-        try:
-            q._browser = await nodriver.start(
-                headless=headless,
-                browser_executable_path=chromium_bin,
-                user_data_dir=user_data_dir or None,
-                browser_args=browser_args,
-                lang="id-ID",
-                sandbox=False,
-            )
-        except Exception as e:
-            raise RuntimeError(
-                f"failed to launch browser at '{chromium_bin}': {e}\n"
-                "If this binary is 'chromium-browser'/'chromium' installed via apt on "
-                "Ubuntu 22.04+, it is likely a snap trampoline script rather than a real "
-                "binary, which frequently fails to launch headlessly as root. Install "
-                "google-chrome-stable instead (see scripts/setup-ubuntu.sh) or set "
-                "browser.chromium_path to a real Chrome/Chromium binary."
-            ) from e
-        q._tab = await q._browser.get("https://booking.kai.id/")
-
-        logger.info("Warming up browser — visiting booking.kai.id homepage...")
-        for attempt in range(15):
-            await asyncio.sleep(2)
-            html = await q._tab.get_content()
-            if not is_cloudflare_challenge(html):
-                logger.info("✅ Browser warmup complete")
-                break
-            logger.debug("Warmup: waiting for challenge... attempt=%d", attempt + 1)
-
+        q._proxy_url = proxy_url
+        q._headless = headless
         q._worker_task = asyncio.create_task(q._worker())
-        logger.info("BookingKAI queue started headless=%s user_data_dir=%s proxy=%s", headless, user_data_dir, proxy_url)
+        logger.info(
+            "BookingKAI queue started strategy=curl_cffi(%s)->camoufox proxy=%s", IMPERSONATE, proxy_url or "(none)"
+        )
         return q
 
     async def _worker(self) -> None:
@@ -153,54 +123,115 @@ class BrowserQueue:
             raise RuntimeError(f"BookingKAI challenge backoff active until {wait_until}")
 
         try:
-            trains = await self._fetch_via_browser(search_url)
-        except Exception as e:
-            msg = str(e).lower()
-            if "cloudflare" in msg or "captcha" in msg:
-                self._record_challenge()
-            raise
+            trains = await asyncio.to_thread(self._fetch_via_curl, search_url)
+            method = "curl_cffi"
+        except Exception as e:  # noqa: BLE001
+            self.logger.info("BookingKAI curl_cffi stage failed (%s); falling back to camoufox", e)
+            try:
+                trains = await self._fetch_via_browser(search_url)
+                method = "camoufox"
+            except Exception as e2:
+                msg = str(e2).lower()
+                if "cloudflare" in msg or "captcha" in msg:
+                    self._record_challenge()
+                raise
+
         self._challenge_failures = 0
         self._next_challenge_retry = 0.0
-        return trains, "browser"
+        return trains, method
 
     def _record_challenge(self) -> None:
         self._challenge_failures += 1
         self._next_challenge_retry = time.time() + _challenge_backoff(self._challenge_failures)
 
-    async def _fetch_via_browser(self, search_url: str) -> list[Train]:
-        if self._tab is None:
-            raise RuntimeError("no persistent browser tab available")
+    # --- stage 1: no browser ------------------------------------------------
 
-        self.logger.debug("Browser navigating (nodriver, persistent tab) url=%s", search_url)
-        await asyncio.wait_for(self._tab.get(search_url), timeout=90)
-        await asyncio.sleep(2)  # let the page settle (JS-rendered blocks, lazy content)
-
-        html = await self._tab.get_content()
-
-        # Headless mode cannot solve interactive challenges. Fail fast so the
-        # queue can apply bounded backoff without blocking other jobs.
-        if is_cloudflare_challenge(html):
-            raise RuntimeError("blocked by Cloudflare challenge or CAPTCHA; manual intervention required")
-        if is_waiting_room(html):
-            raise RuntimeError("blocked by Cloudflare Waiting Room; retry later")
-        if is_navigation_error(html):
-            raise RuntimeError(
-                f"browser failed to reach booking.kai.id ({extract_net_error(html)}); "
-                "if a proxy_url is configured, verify it is actually reachable from this host"
-            )
+    def _fetch_via_curl(self, search_url: str) -> list[Train]:
+        """Blocking; run via asyncio.to_thread. Raises if the page isn't usable."""
+        proxies = {"http": self._proxy_url, "https": self._proxy_url} if self._proxy_url else None
+        resp = cffi_requests.get(
+            search_url,
+            impersonate=IMPERSONATE,
+            proxies=proxies,
+            timeout=30,
+            headers={
+                "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Referer": "https://booking.kai.id/",
+            },
+        )
+        html = resp.text
+        if resp.status_code != 200:
+            raise RuntimeError(f"HTTP {resp.status_code}")
+        _raise_if_blocked(html)
 
         trains = parse_trains(html)
         if not trains:
-            # Zero results can be legitimate (no service that day), but can
-            # also mean the page structure silently didn't match our
-            # selectors (layout change, unexpected intermediate page). Log
+            # Ambiguous: could be a genuinely empty day, or a page whose markup
+            # stopped matching. Escalate to the browser rather than reporting
+            # "no seats" on what might be a parsing miss.
+            raise RuntimeError(f"0 trains parsed (html_len={len(html)})")
+        return trains
+
+    # --- stage 2: camoufox --------------------------------------------------
+
+    async def _ensure_browser(self):
+        async with self._browser_lock:
+            if self._page is not None:
+                return self._page
+            try:
+                from camoufox.async_api import AsyncCamoufox
+            except ImportError as e:
+                raise RuntimeError(
+                    "camoufox is not installed, so the BookingKAI fallback is unavailable.\n"
+                    "Install it with: pip install -U 'camoufox[geoip]' && python -m camoufox fetch"
+                ) from e
+
+            kwargs = {
+                "headless": self._headless,
+                "os": ("windows", "macos", "linux"),
+                "locale": "id-ID",
+                "geoip": True,
+            }
+            if self._proxy_url:
+                kwargs["proxy"] = {"server": self._proxy_url.replace("socks5h://", "socks5://", 1)}
+
+            self.logger.info("Launching camoufox fallback headless=%s", self._headless)
+            self._camoufox_cm = AsyncCamoufox(**kwargs)
+            self._browser = await self._camoufox_cm.__aenter__()
+            self._page = await self._browser.new_page()
+
+            self.logger.info("Camoufox warmup — visiting booking.kai.id homepage...")
+            await self._page.goto("https://booking.kai.id/", timeout=60_000)
+            for attempt in range(15):
+                await asyncio.sleep(2)
+                if not is_cloudflare_challenge(await self._page.content()):
+                    self.logger.info("✅ Camoufox warmup complete")
+                    break
+                self.logger.debug("Warmup: waiting for challenge... attempt=%d", attempt + 1)
+            return self._page
+
+    async def _fetch_via_browser(self, search_url: str) -> list[Train]:
+        page = await self._ensure_browser()
+
+        self.logger.debug("Camoufox navigating url=%s", search_url)
+        await page.goto(search_url, timeout=90_000)
+        await asyncio.sleep(3)  # let the page settle (JS-rendered blocks, lazy content)
+
+        html = await page.content()
+        _raise_if_blocked(html)
+
+        trains = parse_trains(html)
+        if not trains:
+            # Zero results can be legitimate (no service that day), but can also
+            # mean the page structure silently didn't match our selectors. Log
             # enough to tell the two apart without dumping the full HTML.
-            title = await self._tab.evaluate("document.title", return_by_value=True)
             self.logger.warning(
                 "BookingKAI: 0 trains parsed url=%s title=%r html_len=%d",
-                search_url, title, len(html),
+                search_url, await page.title(), len(html),
             )
         return trains
+
+    # --- plumbing -----------------------------------------------------------
 
     async def enqueue(self, search_url: str) -> tuple[list[Train], str]:
         job = _Job(search_url=search_url)
@@ -211,9 +242,21 @@ class BrowserQueue:
         if self._worker_task is not None:
             await self._jobs.put(None)
             await self._worker_task
-        if self._browser is not None:
-            self._browser.stop()
-        self.logger.info("BookingKAI browser queue stopped")
+        if self._camoufox_cm is not None:
+            await self._camoufox_cm.__aexit__(None, None, None)
+        self.logger.info("BookingKAI queue stopped")
+
+
+def _raise_if_blocked(html: str) -> None:
+    if is_cloudflare_challenge(html):
+        raise RuntimeError("blocked by Cloudflare challenge or CAPTCHA")
+    if is_waiting_room(html):
+        raise RuntimeError("blocked by Cloudflare Waiting Room; retry later")
+    if is_navigation_error(html):
+        raise RuntimeError(
+            f"failed to reach booking.kai.id ({extract_net_error(html)}); "
+            "if a proxy_url is configured, verify it is actually reachable from this host"
+        )
 
 
 def _challenge_backoff(attempt: int) -> float:

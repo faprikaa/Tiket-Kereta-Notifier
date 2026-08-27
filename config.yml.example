@@ -10,7 +10,8 @@ webhook:
   enabled: true
   port: 8080
 
-# Konfigurasi Chromium untuk provider bookingkai (via nodriver, murni CDP —
+# chromium_path & user_data_dir sudah tidak dipakai (fallback kini Camoufox,
+# berbasis Firefox). Dibiarkan agar config lama tetap valid. Dulu: (via nodriver, murni CDP —
 # tanpa WebDriver — jadi tidak butuh X display bahkan saat headless: false)
 browser:
   headless: true
