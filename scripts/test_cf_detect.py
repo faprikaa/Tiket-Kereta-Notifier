@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
 """Self-check for is_cloudflare_challenge: real challenge/block pages must be
 caught, but a normal result page carrying Cloudflare's passive jsd script must
-not be — that false positive hid a working curl_cffi fetch behind "BLOCKED"."""
-import importlib.util, pathlib, sys
+not be — that false positive hid a working curl_cffi fetch behind "BLOCKED".
 
-# Load by path: importing notifier.providers.* pulls in the browser deps via the
-# package __init__, which this check doesn't need.
-_p = pathlib.Path(__file__).resolve().parent.parent / "notifier/providers/bookingkai_parse.py"
-_spec = importlib.util.spec_from_file_location("bookingkai_parse", _p)
-_m = importlib.util.module_from_spec(_spec)
-sys.modules["bookingkai_parse"] = _m
-_spec.loader.exec_module(_m)
-is_cloudflare_challenge = _m.is_cloudflare_challenge
+    .venv/bin/python scripts/test_cf_detect.py
+"""
+import pathlib, sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+from notifier.providers.bookingkai_parse import is_cloudflare_challenge
 
 REAL_PAGE_WITH_JSD = (
     '<html lang="id"><head><title>PT Kereta Api Indonesia -\n Reservasi Tiket\n</title>'
