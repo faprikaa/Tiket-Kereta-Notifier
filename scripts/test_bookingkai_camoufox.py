@@ -3,7 +3,7 @@
 anti-detect scraping. Patches fingerprint surfaces (canvas, WebGL, fonts,
 audio context, screen/hardware specs, timezone/locale) at the C++ level
 inside the browser itself rather than via injected JS, which is what most
-"stealth" JS patches (like the ones in test_bookingkai_playwright_chromium.py)
+"stealth" JS patches (like the ones in the now-deleted Playwright strategy scripts)
 can't do — those are detectable-in-principle because they modify JS objects
 after the page's JS context already exists.
 

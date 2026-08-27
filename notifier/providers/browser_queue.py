@@ -12,9 +12,10 @@ Two-stage strategy against Cloudflare on booking.kai.id, cheapest first:
    rather than via injected JS. Slower and heavy, so it is launched lazily on
    the first stage-1 failure and then kept alive.
 
-A strategy sweep over 11 approaches (scripts/test_bookingkai_*.py) found only
-these two clear the site; nodriver, plain/patched Playwright across all three
-engines, and DrissionPage all got the WAF block page.
+A strategy sweep over 11 approaches found only these two clear the site;
+nodriver, plain/patched Playwright across all three engines, and DrissionPage
+all got the WAF block page. Only the two winners are kept in
+scripts/test_bookingkai_*.py.
 
 All bookingkai train configs share one queue so requests are serialized —
 this keeps Cloudflare's `cf_clearance` cookie alive across requests instead of
@@ -26,7 +27,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-import shutil
 import time
 from dataclasses import dataclass, field
 
@@ -54,24 +54,6 @@ IMPERSONATE_POOL = ("chrome124", "chrome120", "safari17_2_ios")
 # stage 2 is meant to be rare.
 BROWSER_IDLE_TIMEOUT = 600.0
 
-CHROMIUM_CANDIDATES = (
-    # Kept for scripts/test_bookingkai_*.py, which still drive Chromium
-    # directly. The queue itself no longer launches Chromium.
-    "google-chrome-stable",
-    "google-chrome",
-    "chromium",
-    "chromium-browser",
-)
-
-
-def find_chromium() -> str:
-    for name in CHROMIUM_CANDIDATES:
-        path = shutil.which(name)
-        if path:
-            return path
-    return ""
-
-
 @dataclass
 class _Job:
     search_url: str
@@ -98,13 +80,8 @@ class BrowserQueue:
         cls,
         logger: logging.Logger,
         proxy_url: str,
-        chromium_path: str,
-        user_data_dir: str,
         headless: bool,
     ) -> "BrowserQueue":
-        # chromium_path/user_data_dir are accepted but unused: stage 1 needs no
-        # browser and stage 2 is Firefox-based. Kept so config and callers
-        # don't have to change.
         q = cls(logger)
         q._proxy_url = proxy_url
         q._headless = headless
@@ -134,14 +111,14 @@ class BrowserQueue:
             raise RuntimeError(f"BookingKAI challenge backoff active until {wait_until}")
 
         try:
-            trains = await asyncio.to_thread(self._fetch_via_curl, search_url)
-            method = "curl_cffi"
+            trains, impersonate = await asyncio.to_thread(self._fetch_via_curl, search_url)
+            method = impersonate
             await self._close_browser_if_idle()
         except Exception as e:  # noqa: BLE001
             self.logger.info("BookingKAI curl_cffi stage failed (%s); falling back to camoufox", e)
             try:
                 trains = await self._fetch_via_browser(search_url)
-                method = "camoufox"
+                method = "firefox"  # camoufox
             except Exception as e2:
                 msg = str(e2).lower()
                 if "cloudflare" in msg or "captcha" in msg:
@@ -158,8 +135,10 @@ class BrowserQueue:
 
     # --- stage 1: no browser ------------------------------------------------
 
-    def _fetch_via_curl(self, search_url: str) -> list[Train]:
-        """Blocking; run via asyncio.to_thread. Raises if no target works.
+    def _fetch_via_curl(self, search_url: str) -> tuple[list[Train], str]:
+        """Blocking; run via asyncio.to_thread. Returns (trains, winning target).
+
+        Raises if no target works.
 
         Targets are not interchangeable in practice: the same proxy exit can
         serve chrome124 a 200 and chrome120 a 403 minutes apart. So try the
@@ -168,7 +147,7 @@ class BrowserQueue:
         errors = []
         for impersonate in random.sample(IMPERSONATE_POOL, len(IMPERSONATE_POOL)):
             try:
-                return self._curl_once(search_url, impersonate)
+                return self._curl_once(search_url, impersonate), impersonate
             except Exception as e:  # noqa: BLE001
                 self.logger.debug("curl_cffi impersonate=%s failed: %s", impersonate, e)
                 errors.append(f"{impersonate}: {e}")

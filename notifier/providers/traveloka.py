@@ -125,4 +125,4 @@ class TravelokaProvider(BaseProvider):
         if resp.status_code != 200:
             raise RuntimeError(f"API returned status {resp.status_code}: {resp.text[:300]}")
 
-        return _parse_trains(resp.json()), "http"
+        return _parse_trains(resp.json()), "edge144"  # ponytail: keep in sync with HEADERS above

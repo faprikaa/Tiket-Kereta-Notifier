@@ -37,8 +37,8 @@ kembali. Untuk memeriksa kesiapan host tanpa mengubah apa pun:
 ./scripts/setup-ubuntu.sh --check
 ```
 
-Setup memasang Chromium, `cloudflared`, Python 3.10+, library sistem, font,
-dan `tmux`, lalu membuat virtualenv di `.venv/` dan menginstall dependency
+Setup memasang `cloudflared`, Python 3.10+, library sistem, font, `tmux`,
+dan browser Camoufox, lalu membuat virtualenv di `.venv/` dan menginstall dependency
 Python dari `requirements.txt`. Setup tidak memasang WARP, Docker, atau
 systemd.
 
@@ -72,12 +72,10 @@ webhook:
   enabled: false
   port: 8080
 
-# Konfigurasi browser untuk BookingKAI provider (opsional)
-# Semua field opsional. chromium_path/user_data_dir kini tidak dipakai
-# (Camoufox berbasis Firefox); dipertahankan agar config lama tetap valid.
+# Konfigurasi browser (Camoufox) untuk BookingKAI provider (opsional)
+# Key lama chromium_path/user_data_dir sudah dihapus — kalau masih ada di
+# config kamu, diabaikan tanpa error.
 browser:
-  chromium_path: ""   # Kosong = auto-detect dari PATH sistem
-  user_data_dir: ".cache/tiket-kereta-notifier/chromium"
   headless: true
 
 trains:

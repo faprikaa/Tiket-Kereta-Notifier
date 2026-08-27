@@ -34,35 +34,13 @@ require_supported_host() {
   fi
 }
 
-find_chromium() {
-  local name
-  # google-chrome(-stable) checked first: on Ubuntu 22.04+, `apt install
-  # chromium-browser` installs a snap trampoline script rather than a real
-  # binary, which routinely fails to launch headlessly as root.
-  for name in google-chrome-stable google-chrome chromium chromium-browser; do
-    if has "$name"; then
-      command -v "$name"
-      return 0
-    fi
-  done
-  return 1
-}
-
 python_is_compatible() {
   has python3 || return 1
   python3 -c "import sys; sys.exit(0 if sys.version_info >= tuple(map(int, '$PYTHON_MIN'.split('.'))) else 1)"
 }
 
 report_status() {
-  local missing=0 chromium_path=""
-  if chromium_path="$(find_chromium)"; then
-    log "Chromium: $chromium_path"
-  else
-    log "Chromium: MISSING"
-    missing=1
-  fi
-
-  local command_name
+  local missing=0 command_name
   for command_name in cloudflared tmux; do
     if has "$command_name"; then
       log "$command_name: $(command -v "$command_name")"
@@ -79,7 +57,7 @@ report_status() {
     missing=1
   fi
 
-  if [[ -d "$ROOT_DIR/.venv" ]] && "$ROOT_DIR/.venv/bin/python" -c "import nodriver, httpx, curl_cffi, aiohttp, bs4, yaml, cryptography" >/dev/null 2>&1; then
+  if [[ -d "$ROOT_DIR/.venv" ]] && "$ROOT_DIR/.venv/bin/python" -c "import camoufox, httpx, curl_cffi, aiohttp, bs4, yaml, cryptography" >/dev/null 2>&1; then
     log "Python venv dependencies: OK ($ROOT_DIR/.venv)"
   else
     log "Python venv dependencies: MISSING"
@@ -104,21 +82,6 @@ install_apt_dependencies() {
     tmux python3 python3-venv python3-pip
 }
 
-install_google_chrome() {
-  # Prefer a real Google Chrome .deb over `apt install chromium-browser`,
-  # which on Ubuntu 22.04+ is a snap trampoline script — that routinely
-  # fails to launch headlessly as root under CDP automation (nodriver).
-  find_chromium >/dev/null && return
-  log "Installing Google Chrome (stable)"
-  "${SUDO[@]}" install -d -m 0755 /etc/apt/keyrings
-  curl --fail --location --silent --show-error https://dl.google.com/linux/linux_signing_key.pub |
-    "${SUDO[@]}" gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
-  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" |
-    "${SUDO[@]}" tee /etc/apt/sources.list.d/google-chrome.list >/dev/null
-  "${SUDO[@]}" apt-get update
-  "${SUDO[@]}" env DEBIAN_FRONTEND=noninteractive apt-get install -y google-chrome-stable
-}
-
 install_cloudflared() {
   has cloudflared && return
   local tmp
@@ -139,6 +102,10 @@ setup_venv() {
   log "Installing Python dependencies (requirements.txt)"
   .venv/bin/pip install --upgrade pip -q
   .venv/bin/pip install -r requirements.txt -q
+  # Camoufox downloads its ~200MB Firefox build lazily on first launch; pull it
+  # here so the stage-2 fallback isn't the thing that pays for it mid-monitor.
+  log "Fetching Camoufox browser"
+  .venv/bin/python -m camoufox fetch
 }
 
 require_supported_host
@@ -149,7 +116,6 @@ if [[ "$MODE" == "check" ]]; then
 fi
 
 install_apt_dependencies
-install_google_chrome
 install_cloudflared
 setup_venv
 

@@ -102,8 +102,6 @@ class WebhookConfig:
 
 @dataclass
 class BrowserConfig:
-    chromium_path: str = ""
-    user_data_dir: str = ".cache/tiket-kereta-notifier/chromium"
     headless: bool = True
 
 
@@ -201,11 +199,9 @@ def load(path: str) -> Config:
             enabled=bool(webhook_raw.get("enabled", False)),
             port=int(webhook_raw.get("port") or 8080),
         ),
-        browser=BrowserConfig(
-            chromium_path=str(browser_raw.get("chromium_path", "") or ""),
-            user_data_dir=str(browser_raw.get("user_data_dir", "") or ".cache/tiket-kereta-notifier/chromium"),
-            headless=bool(browser_raw.get("headless", True)),
-        ),
+        # ponytail: extra keys in `browser:` (chromium_path, user_data_dir from
+        # the pre-Camoufox era) are silently ignored, so old configs still load.
+        browser=BrowserConfig(headless=bool(browser_raw.get("headless", True))),
         trains=trains,
     )
     _process(cfg)

@@ -13,7 +13,6 @@ share at least --origin, --dest, --date, --proxy, --no-headless.
 from __future__ import annotations
 
 import argparse
-import shutil
 import sys
 from pathlib import Path
 from urllib.parse import quote
@@ -28,17 +27,6 @@ from notifier.providers.bookingkai_parse import (  # noqa: E402
     is_waiting_room,
     parse_trains,
 )
-from notifier.providers.browser_queue import CHROMIUM_CANDIDATES  # noqa: E402
-
-
-def find_chromium() -> str:
-    for name in CHROMIUM_CANDIDATES:
-        path = shutil.which(name)
-        if path:
-            return path
-    return ""
-
-
 def build_search_url(origin: str, dest: str, date: str) -> str:
     year, month, day = date.split("-")
     date_indo = f"{int(day):02d}-{MONTH_NAMES[int(month)]}-{int(year)}"

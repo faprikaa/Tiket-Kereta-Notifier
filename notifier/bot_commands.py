@@ -185,7 +185,14 @@ def register_commands(bot: Bot, telegram: TelegramClient, providers: list[BasePr
                 emoji = PROVIDER_EMOJI.get(f.provider_name, "🔌")
                 label = f.provider_name.upper() + (" (proxy)" if f.proxy_url else "")
 
-                lines.append(f" {status_icon} {emoji} {label} | #{flat_idx + 1} | {last_check}")
+                lines.append(f" {status_icon} {emoji} {label} | #{flat_idx + 1} | {int(f.interval)}s | {last_check}")
+                filters = []
+                if f.max_price:
+                    filters.append(f"💰 ≤ Rp {format_rupiah(f.max_price)}")
+                if f.min_departure_hour or f.max_departure_hour:
+                    filters.append(f"🕐 {format_hour_range(f.min_departure_hour, f.max_departure_hour)}")
+                if filters:
+                    lines.append("      " + " | ".join(filters))
                 flat_idx += 1
 
         lines.append("\n/list <n> · /check <n> · /toggle <n>")

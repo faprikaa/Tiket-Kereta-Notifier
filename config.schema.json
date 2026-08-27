@@ -35,22 +35,12 @@
     },
     "browser": {
       "type": "object",
-      "description": "Chromium settings for the BookingKAI provider",
+      "description": "Browser settings for the BookingKAI Camoufox fallback",
       "properties": {
         "headless": {
           "type": "boolean",
           "default": true,
-          "description": "Run Chromium without a visible display"
-        },
-        "chromium_path": {
-          "type": "string",
-          "default": "",
-          "description": "Explicit Chromium binary path; empty enables auto-detection"
-        },
-        "user_data_dir": {
-          "type": "string",
-          "default": ".cache/tiket-kereta-notifier/chromium",
-          "description": "Persistent Chromium profile directory"
+          "description": "Run Camoufox without a visible display"
         }
       }
     },

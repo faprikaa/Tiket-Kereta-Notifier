@@ -10,13 +10,10 @@ webhook:
   enabled: true
   port: 8080
 
-# chromium_path & user_data_dir sudah tidak dipakai (fallback kini Camoufox,
-# berbasis Firefox). Dibiarkan agar config lama tetap valid. Dulu: (via nodriver, murni CDP —
-# tanpa WebDriver — jadi tidak butuh X display bahkan saat headless: false)
+# Dipakai Camoufox (Firefox), fallback BookingKAI. Key lama chromium_path &
+# user_data_dir sudah dihapus — kalau masih ada di config kamu, diabaikan.
 browser:
   headless: true
-  chromium_path: ""                          # Kosong = auto-detect dari PATH
-  user_data_dir: ".cache/tiket-kereta-notifier/chromium"
 
 trains:
   # Satu entry per kereta, bisa punya banyak provider

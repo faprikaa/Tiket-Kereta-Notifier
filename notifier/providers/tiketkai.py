@@ -129,4 +129,4 @@ class TiketKaiProvider(BaseProvider):
                 )
             )
 
-        return trains, "http"
+        return trains, "edge145"  # ponytail: keep in sync with HEADERS above

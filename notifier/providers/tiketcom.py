@@ -114,4 +114,4 @@ class TiketcomProvider(BaseProvider):
         if not depart:
             raise RuntimeError("no journey data in response")
 
-        return _parse_trains(depart.get("journeys") or []), "curl_cffi"
+        return _parse_trains(depart.get("journeys") or []), "chrome"

@@ -32,8 +32,6 @@ async def build_providers(
             bk_queue = await BrowserQueue.create(
                 logger,
                 flat.proxy_url,
-                cfg.browser.chromium_path,
-                cfg.browser.user_data_dir,
                 cfg.browser.headless,
             )
             break
