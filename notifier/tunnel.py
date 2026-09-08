@@ -64,10 +64,7 @@ class Tunnel:
         self._started = True
         self.logger.info("Tunnel started public_url=%s", url)
 
-        try:
-            await self._wait_for_ready(url, timeout=30)
-        except RuntimeError as e:
-            self.logger.warning("Tunnel health check failed, proceeding anyway error=%s", e)
+        await self._wait_for_ready(url, timeout=30)
 
         return url
 
