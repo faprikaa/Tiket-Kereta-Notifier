@@ -1,0 +1,21 @@
+services:
+  notifier:
+    build: .
+    platform: linux/amd64
+    init: true
+    restart: unless-stopped
+    shm_size: 256m
+    stop_grace_period: 30s
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - type: bind
+        source: ./config.yml
+        target: /app/config.yml
+        read_only: true
+        bind:
+          create_host_path: false

@@ -95,8 +95,11 @@ class TelegramClient:
         resp.raise_for_status()
         return resp.json().get("result", [])
 
-    async def set_webhook(self, url: str) -> None:
-        resp = await self._client.post(self._url("setWebhook"), json={"url": url, "allowed_updates": ["message"]})
+    async def set_webhook(self, url: str, secret_token: str) -> None:
+        resp = await self._client.post(
+            self._url("setWebhook"),
+            json={"url": url, "allowed_updates": ["message"], "secret_token": secret_token},
+        )
         result = resp.json()
         if not result.get("ok"):
             raise RuntimeError(f"telegram API error: {result.get('description')}")
@@ -137,6 +140,9 @@ class Bot:
         return cmd, args
 
     async def dispatch(self, chat_id: str, text: str) -> None:
+        if not self.telegram.chat_id or chat_id != self.telegram.chat_id:
+            self.logger.warning("Ignoring command from unauthorized chat_id=%s", chat_id)
+            return
         cmd, args = self._parse_command(text)
         handler = self.commands.get(cmd)
         if handler is not None:

@@ -154,12 +154,14 @@ async def run_bot(logger: logging.Logger, cfg: Config, telegram: TelegramClient,
             except Exception as e:
                 logger.error("Failed to start tunnel error=%s", e)
                 return
-            await telegram.set_webhook(public_url + "/webhook")
+            await telegram.set_webhook(public_url + "/webhook", webhook.secret_token)
             await telegram.send_message(f"🚀 Bot started!\n🔗 {public_url}\n\n{help_text}")
 
         asyncio.create_task(start_tunnel())
         await shutdown.wait()
     else:
+        # Clear a webhook left by a previous run before calling getUpdates.
+        await telegram.delete_webhook()
         await telegram.send_message(f"🚀 Bot started!\n\n{help_text}")
         logger.info("Bot running in long-polling mode. Press Ctrl+C to exit.")
         poll_task = asyncio.create_task(_poll_loop(bot, shutdown))

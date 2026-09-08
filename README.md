@@ -59,9 +59,56 @@ cp config.yml.example config.yml
 > CAPTCHA interaktif tetap tidak dipecahkan otomatis; bot melakukan backoff,
 > mengirim notifikasi Telegram, dan mungkin membutuhkan intervensi manual.
 
+## Docker
+
+Butuh Docker Engine dan Docker Compose v2 yang sudah terpasang. Image ditargetkan
+untuk Linux `amd64`; host ARM memerlukan emulasi. Installer Ubuntu tidak diperlukan
+untuk jalur Docker.
+
+```bash
+cp config.yml.example config.yml
+# Edit config.yml: token bot, chat ID numerik, rute, dan tanggal perjalanan aktual.
+# Pertahankan browser.headless: true; polling (webhook.enabled: false) paling sederhana.
+```
+
+Container berjalan sebagai user non-root UID/GID `10001`. Pada Linux, pastikan
+file config dapat dibaca user tersebut tanpa membukanya untuk semua user:
+
+```bash
+sudo chown "$(id -u):10001" config.yml
+chmod 640 config.yml
+
+docker compose up -d --build
+docker compose logs -f notifier
+# Hentikan:
+docker compose down
+```
+
+- `config.yml` wajib disiapkan sendiri; token/chat ID asli tidak disimpan di repo
+  atau image. Compose memasangnya read-only dan menolak source yang belum ada
+  (bukan membuat direktori `config.yml` tanpa sengaja).
+- Image memasang dependency Python, library Firefox, binary Camoufox, dan
+  `cloudflared` dengan SHA-256 terverifikasi. Browser diunduh saat build dengan
+  user yang sama seperti runtime. Build memerlukan akses internet; tidak
+  menjalankan monitoring atau mengirim pesan Telegram.
+- Tidak ada port host yang dipublikasikan. Polling memakai koneksi outbound;
+  jika `webhook.enabled: true`, Cloudflare Tunnel di dalam container menangani
+  koneksi masuk ke webhook. Tidak perlu menambah `ports:`.
+- Untuk proxy yang berjalan di host, gunakan misalnya
+  `socks5://host.docker.internal:40000`, bukan `127.0.0.1`. Pada Linux bridge,
+  proxy harus listen pada alamat host yang terjangkau dari container; listener
+  loopback-only tidak cukup. Batasi akses dengan firewall ke jaringan Docker,
+  jangan mengekspos proxy terbuka ke internet. Proxy di container lain memakai
+  nama service pada network yang sama.
+- Jangan jalankan dua instance dengan token bot yang sama. Pause/sleep dan
+  riwayat monitoring berada di memori dan hilang saat restart.
+- Setelah mengedit config, jalankan `docker compose up -d --force-recreate`.
+  Pembaruan kode/dependency membutuhkan `docker compose up -d --build`.
+
 ## Configuration
 
-Edit `config.yml`:
+Edit `config.yml`. Ganti tanggal contoh dengan tanggal perjalanan yang masih
+tersedia di provider; menyalin contoh saja belum menghasilkan config siap pakai:
 
 ```yaml
 telegram:
@@ -177,6 +224,29 @@ tmux attach -t tiket-bot
 # Hentikan dari dalam sesi: Ctrl-c
 # Atau dari terminal lain:
 tmux kill-session -t tiket-bot
+```
+
+## Telegram Security
+
+- Command hanya diproses dari `telegram.chat_id` yang dikonfigurasi (ID numerik,
+  termasuk tanda minus untuk grup). Chat lain diabaikan pada polling dan webhook.
+  Jika memakai grup, **semua anggota grup tersebut dapat menjalankan command**;
+  gunakan private chat jika kontrol harus hanya untuk satu orang.
+- Webhook memakai secret acak baru setiap proses berjalan, didaftarkan melalui
+  Telegram `setWebhook`. Header `X-Telegram-Bot-Api-Secret-Token` diperiksa dengan
+  perbandingan constant-time sebelum body dibaca. Secret hilang/salah mendapat
+  HTTP 403; payload yang tidak valid mendapat HTTP 400. Tidak perlu menambahkan
+  secret ke YAML.
+- Polling menghapus webhook lama saat startup, sehingga perpindahan mode tidak
+  terhalang webhook yang tertinggal dari proses sebelumnya.
+- Jangan membagikan token bot, config, atau log. Log command dapat mengandung
+  chat ID dan isi pesan. Docker tidak menggantikan pengamanan host/akun Telegram.
+
+Regression check offline (tidak menghubungi Telegram atau provider), setelah
+install dependency Python:
+
+```bash
+.venv/bin/python scripts/test_telegram_security.py
 ```
 
 ## Telegram Commands

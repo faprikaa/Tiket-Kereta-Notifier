@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 
 from aiohttp import web
 
@@ -15,6 +16,7 @@ class WebhookServer:
         self.port = port
         self.bot = bot
         self.logger = logger
+        self.secret_token = secrets.token_urlsafe(32)
         self._runner: web.AppRunner | None = None
         self._background_tasks: set[asyncio.Task] = set()
 
@@ -41,10 +43,24 @@ class WebhookServer:
         return web.json_response({"status": "ok"})
 
     async def _handle_webhook(self, request: web.Request) -> web.Response:
+        supplied_token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if not secrets.compare_digest(supplied_token.encode("utf-8"), self.secret_token.encode("ascii")):
+            return web.Response(status=403, text="Forbidden")
         try:
             update = await request.json()
         except ValueError as e:
             self.logger.error("Failed to parse webhook update error=%s", e)
+            return web.Response(status=400, text="Bad request")
+
+        if not isinstance(update, dict):
+            return web.Response(status=400, text="Bad request")
+        message = update.get("message")
+        if message is not None and (
+            not isinstance(message, dict)
+            or not isinstance(message.get("chat"), dict)
+            or not isinstance(message["chat"].get("id"), int)
+            or ("text" in message and not isinstance(message["text"], str))
+        ):
             return web.Response(status=400, text="Bad request")
 
         self.logger.debug("Received webhook update body=%s", update)

@@ -1,0 +1,9 @@
+# Only runtime sources enter the build context; config and credentials stay out.
+**
+!Dockerfile
+!requirements.txt
+!main.py
+!notifier/
+!notifier/**
+**/__pycache__/
+**/*.pyc

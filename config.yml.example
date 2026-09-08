@@ -1,13 +1,16 @@
 # yaml-language-server: $schema=./config.schema.json
 # Tiket Kereta Notifier - Configuration
-# Copy this file and modify as needed
+# Copy to config.yml; fill credentials and replace ALL example travel dates.
+# Docker: keep browser.headless true; see README for config file permissions.
 
 telegram:
-  bot_token: "79481236:xxxxxx-xxxxx-x"
-  chat_id: "-4947123402"
+  bot_token: "YOUR_BOT_TOKEN"
+  # Numeric chat ID; only this chat may run commands. All members can if a group.
+  chat_id: "YOUR_CHAT_ID"
 
 webhook:
-  enabled: true
+  # Polling by default. Webhook uses cloudflared and an automatic secret token.
+  enabled: false
   port: 8080
 
 # Dipakai Camoufox (Firefox), fallback BookingKAI. Key lama chromium_path &
@@ -73,6 +76,8 @@ trains:
   #     - bookingkai
 
   # Contoh: kereta dengan provider yang butuh proxy
+  # Docker + proxy di host: ganti 127.0.0.1 dengan host.docker.internal.
+  # Proxy harus menerima koneksi dari bridge Docker; jangan buka ke publik.
   # - name: ARGO DWIPANGGA
   #   origin: GMR
   #   destination: YK
