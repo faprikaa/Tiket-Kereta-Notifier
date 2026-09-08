@@ -23,7 +23,12 @@ class Tunnel:
             return self.url
 
         self._process = await asyncio.create_subprocess_exec(
-            "cloudflared", "tunnel", "--url", local_url,
+            "cloudflared",
+            "tunnel",
+            "--config",
+            "cloudflared-quick.yml",
+            "--url",
+            local_url,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
