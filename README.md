@@ -241,13 +241,19 @@ CLOUDFLARED_LOG_DIR=/path/logs       # override folder log (default: ./logs)
 CLOUDFLARED_READY_TIMEOUT=60         # detik nunggu tunnel bisa diakses publik
 ```
 
-### Health check
+### Health check & fallback
 
-Setelah tunnel dapat URL, bot nge-probe `<url>/health` dari luar. Kalau probe
-gagal, webhook **tetap dipasang** (probe bisa gagal padahal tunnel sehat, mis.
-edge Cloudflare belum propagasi atau egress host difilter) dan alasannya
-dicatat di log plus dikirim ke Telegram. Yang menentukan akhirnya `setWebhook`
-Telegram sendiri.
+Hostname quick tunnel baru bisa di-resolve beberapa saat setelah cloudflared
+konek ke edge (banner cloudflared sendiri bilang "it may take some time to be
+reachable"). Sebelum itu, hostname NXDOMAIN di mana-mana, termasuk dari server
+Telegram. Karena itu:
+
+1. Bot probe `<url>/health` maksimal 60s (`CLOUDFLARED_READY_TIMEOUT`). Probe
+   ini cuma indikator — gagalnya tidak membatalkan apa pun.
+2. `setWebhook` di-retry sampai ~5 menit (0/15/30/60/60/60/60 detik). Resolver
+   Telegram yang jadi penentu, bukan probe lokal.
+3. Kalau webhook tetap gagal, bot **fallback ke long-polling** supaya command
+   tetap jalan tanpa jalur inbound. Statusnya dikirim ke Telegram.
 
 ### Log
 

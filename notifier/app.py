@@ -142,6 +142,7 @@ async def run_bot(logger: logging.Logger, cfg: Config, telegram: TelegramClient,
     help_text = HELP_TEXT_TEMPLATE.format(n=train_count)
     tunnel: Tunnel | None = None
     webhook: WebhookServer | None = None
+    fallback_poll: asyncio.Task | None = None
 
     if cfg.webhook.enabled:
         tunnel = Tunnel(logger)
@@ -149,31 +150,39 @@ async def run_bot(logger: logging.Logger, cfg: Config, telegram: TelegramClient,
         await webhook.start()
 
         async def start_tunnel() -> None:
+            nonlocal fallback_poll
             try:
                 public_url = await tunnel.start(f"http://127.0.0.1:{cfg.webhook.port}")
             except Exception as e:
                 logger.error("Failed to start tunnel error=%s log_file=%s", e, tunnel.log_file)
-                await telegram.send_message(
-                    f"❌ Tunnel gagal start: {e}\nBot tidak menerima command sampai tunnel hidup."
+                await _fall_back_to_polling(
+                    logger, telegram, bot, shutdown, f"tunnel gagal start: {e}", help_text
                 )
+                fallback_poll = asyncio.create_task(_poll_loop(bot, shutdown))
                 return
 
-            # The health probe can fail while the tunnel is fine (edge still
-            # propagating, egress filtering). Register the webhook anyway —
+            # The health probe can fail while the tunnel is fine (egress
+            # filtering, DNS still propagating). Try registering anyway —
             # Telegram's own setWebhook is the authoritative reachability test.
             note = ""
             if not tunnel.ready:
-                note = f"\n⚠️ Health check tunnel gagal ({tunnel.ready_error}); webhook tetap dipasang."
-            try:
-                await telegram.set_webhook(public_url + "/webhook", webhook.secret_token)
-            except Exception as e:
-                logger.error("set_webhook failed url=%s error=%s", public_url, e)
-                await telegram.send_message(f"❌ setWebhook gagal: {e}\n🔗 {public_url}")
+                note = f"\n⚠️ Health check tunnel gagal ({tunnel.ready_error}); webhook tetap dicoba."
+
+            if await _register_webhook(logger, telegram, webhook, public_url, shutdown):
+                await telegram.send_message(f"🚀 Bot started!\n🔗 {public_url}{note}\n\n{help_text}")
                 return
-            await telegram.send_message(f"🚀 Bot started!\n🔗 {public_url}{note}\n\n{help_text}")
+
+            # Never leave the bot unreachable just because the tunnel hostname
+            # never became resolvable — long-polling needs no inbound path.
+            await _fall_back_to_polling(
+                logger, telegram, bot, shutdown, "webhook tidak bisa dipasang", help_text
+            )
+            fallback_poll = asyncio.create_task(_poll_loop(bot, shutdown))
 
         asyncio.create_task(start_tunnel())
         await shutdown.wait()
+        if fallback_poll is not None:
+            fallback_poll.cancel()
     else:
         # Clear a webhook left by a previous run before calling getUpdates.
         await telegram.delete_webhook()
@@ -193,6 +202,54 @@ async def run_bot(logger: logging.Logger, cfg: Config, telegram: TelegramClient,
             await webhook.stop()
         if tunnel is not None:
             await tunnel.stop()
+
+
+async def _register_webhook(
+    logger: logging.Logger,
+    telegram: TelegramClient,
+    webhook: WebhookServer,
+    public_url: str,
+    shutdown: asyncio.Event,
+) -> bool:
+    """setWebhook, retried while Telegram still can't resolve the tunnel host."""
+    delays = [0, 15, 30, 60, 60, 60, 60]
+    last_error = ""
+    for attempt, delay in enumerate(delays, start=1):
+        if delay:
+            try:
+                await asyncio.wait_for(shutdown.wait(), timeout=delay)
+                return False  # shutting down
+            except asyncio.TimeoutError:
+                pass
+        try:
+            await telegram.set_webhook(public_url + "/webhook", webhook.secret_token)
+            logger.info("Webhook registered url=%s attempts=%d", public_url, attempt)
+            return True
+        except Exception as e:  # noqa: BLE001
+            last_error = str(e)
+            logger.warning(
+                "set_webhook failed attempt=%d/%d url=%s error=%s", attempt, len(delays), public_url, e
+            )
+    logger.error("Giving up on webhook url=%s last_error=%s", public_url, last_error)
+    return False
+
+
+async def _fall_back_to_polling(
+    logger: logging.Logger,
+    telegram: TelegramClient,
+    bot: Bot,
+    shutdown: asyncio.Event,
+    reason: str,
+    help_text: str,
+) -> None:
+    logger.warning("Falling back to long-polling reason=%s", reason)
+    try:
+        await telegram.delete_webhook()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("delete_webhook failed error=%s", e)
+    await telegram.send_message(
+        f"⚠️ {reason.capitalize()} — bot jalan pakai long-polling.\n\n{help_text}"
+    )
 
 
 async def _poll_loop(bot: Bot, shutdown: asyncio.Event) -> None:

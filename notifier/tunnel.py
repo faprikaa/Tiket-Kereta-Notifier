@@ -24,7 +24,11 @@ FATAL_RE = re.compile(
     re.IGNORECASE,
 )
 
-# The public hostname can lag behind the edge connection, so give it room.
+# A quick tunnel's DNS record is published after cloudflared registers its edge
+# connection — cloudflared's own banner says "it may take some time to be
+# reachable". Until then the hostname is NXDOMAIN everywhere, Telegram included.
+# Kept short on purpose: this probe is only advisory, and waiting on it delays
+# setWebhook, whose retries do the real waiting from Telegram's own resolver.
 READY_TIMEOUT = float(os.environ.get("CLOUDFLARED_READY_TIMEOUT", "60"))
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -213,14 +217,16 @@ class Tunnel:
         await asyncio.sleep(5)  # DNS propagation
 
         health_url = url + "/health"
-        deadline = asyncio.get_running_loop().time() + timeout
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
         attempt = 0
         last_error = ""
+        reported = False
 
         # trust_env=False: a host-wide HTTP(S)_PROXY/ALL_PROXY must not reroute
         # the one request whose whole point is to test the public path.
-        async with httpx.AsyncClient(timeout=5.0, trust_env=False, follow_redirects=True) as client:
-            while asyncio.get_running_loop().time() < deadline:
+        async with httpx.AsyncClient(timeout=10.0, trust_env=False, follow_redirects=True) as client:
+            while loop.time() < deadline:
                 attempt += 1
                 try:
                     resp = await client.get(health_url)
@@ -231,7 +237,18 @@ class Tunnel:
                 except httpx.HTTPError as e:
                     last_error = f"{type(e).__name__}: {e}"
                 self.logger.debug("Tunnel not ready yet attempt=%d error=%s", attempt, last_error)
-                await asyncio.sleep(1)
+
+                # Say something once instead of going quiet for minutes, but keep
+                # waiting — DNS for a fresh quick tunnel can take a while.
+                if not reported and attempt >= 5:
+                    reported = True
+                    self.logger.info(
+                        "Tunnel not reachable yet, still waiting url=%s error=%s", health_url, last_error
+                    )
+
+                # Backoff: hammering an NXDOMAIN every second only refreshes the
+                # resolver's negative cache entry.
+                await asyncio.sleep(min(15.0, 2.0 * attempt))
 
         self.ready_error = last_error or "no response"
         self.logger.warning(
