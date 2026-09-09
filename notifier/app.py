@@ -153,9 +153,24 @@ async def run_bot(logger: logging.Logger, cfg: Config, telegram: TelegramClient,
                 public_url = await tunnel.start(f"http://127.0.0.1:{cfg.webhook.port}")
             except Exception as e:
                 logger.error("Failed to start tunnel error=%s log_file=%s", e, tunnel.log_file)
+                await telegram.send_message(
+                    f"❌ Tunnel gagal start: {e}\nBot tidak menerima command sampai tunnel hidup."
+                )
                 return
-            await telegram.set_webhook(public_url + "/webhook", webhook.secret_token)
-            await telegram.send_message(f"🚀 Bot started!\n🔗 {public_url}\n\n{help_text}")
+
+            # The health probe can fail while the tunnel is fine (edge still
+            # propagating, egress filtering). Register the webhook anyway —
+            # Telegram's own setWebhook is the authoritative reachability test.
+            note = ""
+            if not tunnel.ready:
+                note = f"\n⚠️ Health check tunnel gagal ({tunnel.ready_error}); webhook tetap dipasang."
+            try:
+                await telegram.set_webhook(public_url + "/webhook", webhook.secret_token)
+            except Exception as e:
+                logger.error("set_webhook failed url=%s error=%s", public_url, e)
+                await telegram.send_message(f"❌ setWebhook gagal: {e}\n🔗 {public_url}")
+                return
+            await telegram.send_message(f"🚀 Bot started!\n🔗 {public_url}{note}\n\n{help_text}")
 
         asyncio.create_task(start_tunnel())
         await shutdown.wait()

@@ -24,6 +24,9 @@ FATAL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The public hostname can lag behind the edge connection, so give it room.
+READY_TIMEOUT = float(os.environ.get("CLOUDFLARED_READY_TIMEOUT", "60"))
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG = PROJECT_ROOT / "cloudflared.yml"
 DEFAULT_LOG_DIR = PROJECT_ROOT / "logs"
@@ -114,6 +117,8 @@ class Tunnel:
     def __init__(self, logger: logging.Logger) -> None:
         self.logger = logger
         self.url = ""
+        self.ready = False
+        self.ready_error = ""
         self.error_count = 0
         self.last_error = ""
         self._process: asyncio.subprocess.Process | None = None
@@ -192,31 +197,49 @@ class Tunnel:
         self._started = True
         self.logger.info("Tunnel started public_url=%s log_file=%s", url, self.log_file)
 
-        await self._wait_for_ready(url, timeout=30)
+        self.ready = await self._wait_for_ready(url, timeout=READY_TIMEOUT)
 
         return url
 
-    async def _wait_for_ready(self, url: str, timeout: float) -> None:
-        self.logger.info("Waiting for tunnel to be accessible...")
+    async def _wait_for_ready(self, url: str, timeout: float) -> bool:
+        """Probe the tunnel from outside. False means unproven, not necessarily broken.
+
+        A quick tunnel is often reachable a while after cloudflared registers its
+        connection, and the probe itself can fail for reasons that don't affect
+        Telegram (egress filtering, DNS caching). So the caller keeps going and
+        this only reports what it saw.
+        """
+        self.logger.info("Waiting for tunnel to be accessible... url=%s timeout=%ss", url, timeout)
         await asyncio.sleep(5)  # DNS propagation
 
         health_url = url + "/health"
         deadline = asyncio.get_running_loop().time() + timeout
         attempt = 0
+        last_error = ""
 
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        # trust_env=False: a host-wide HTTP(S)_PROXY/ALL_PROXY must not reroute
+        # the one request whose whole point is to test the public path.
+        async with httpx.AsyncClient(timeout=5.0, trust_env=False, follow_redirects=True) as client:
             while asyncio.get_running_loop().time() < deadline:
                 attempt += 1
                 try:
                     resp = await client.get(health_url)
                     if resp.status_code == 200:
                         self.logger.info("Tunnel is ready! attempts=%d", attempt)
-                        return
+                        return True
+                    last_error = f"HTTP {resp.status_code}"
                 except httpx.HTTPError as e:
-                    self.logger.debug("Tunnel not ready yet attempt=%d error=%s", attempt, e)
+                    last_error = f"{type(e).__name__}: {e}"
+                self.logger.debug("Tunnel not ready yet attempt=%d error=%s", attempt, last_error)
                 await asyncio.sleep(1)
 
-        raise RuntimeError(f"tunnel not accessible after {timeout}s (see {self.log_file or 'cloudflared output'})")
+        self.ready_error = last_error or "no response"
+        self.logger.warning(
+            "Tunnel health probe failed url=%s attempts=%d last_error=%s log_file=%s "
+            "(tunnel process still running; continuing anyway)",
+            health_url, attempt, self.ready_error, self.log_file,
+        )
+        return False
 
     async def stop(self) -> None:
         if not self._started and self._process is None:
@@ -238,6 +261,7 @@ class Tunnel:
         self._writer.close()
         self._started = False
         self.url = ""
+        self.ready = False
         self.logger.info("Tunnel stopped errors_seen=%d", self.error_count)
 
     def is_running(self) -> bool:

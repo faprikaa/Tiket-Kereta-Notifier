@@ -238,7 +238,16 @@ loglevel/protocol/retry bisa diubah tanpa menyentuh kode.
 ```bash
 CLOUDFLARED_CONFIG=/path/lain.yml    # override file config
 CLOUDFLARED_LOG_DIR=/path/logs       # override folder log (default: ./logs)
+CLOUDFLARED_READY_TIMEOUT=60         # detik nunggu tunnel bisa diakses publik
 ```
+
+### Health check
+
+Setelah tunnel dapat URL, bot nge-probe `<url>/health` dari luar. Kalau probe
+gagal, webhook **tetap dipasang** (probe bisa gagal padahal tunnel sehat, mis.
+edge Cloudflare belum propagasi atau egress host difilter) dan alasannya
+dicatat di log plus dikirim ke Telegram. Yang menentukan akhirnya `setWebhook`
+Telegram sendiri.
 
 ### Log
 
