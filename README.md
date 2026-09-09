@@ -69,6 +69,9 @@ untuk jalur Docker.
 cp config.yml.example config.yml
 # Edit config.yml: token bot, chat ID numerik, rute, dan tanggal perjalanan aktual.
 # Pertahankan browser.headless: true; polling (webhook.enabled: false) paling sederhana.
+
+# Folder log tunnel di-bind ke container; user di dalam image ber-UID 10001.
+mkdir -p logs && sudo chown 10001:10001 logs
 ```
 
 Container berjalan sebagai user non-root UID/GID `10001`. Pada Linux, pastikan
@@ -226,6 +229,36 @@ tmux attach -t tiket-bot
 tmux kill-session -t tiket-bot
 ```
 
+## Cloudflare Tunnel
+
+Dipakai saat `webhook.enabled: true`. Setting cloudflared dibaca dari
+`cloudflared.yml` di root project (bukan `~/.cloudflared/config.yml`), jadi
+loglevel/protocol/retry bisa diubah tanpa menyentuh kode.
+
+```bash
+CLOUDFLARED_CONFIG=/path/lain.yml    # override file config
+CLOUDFLARED_LOG_DIR=/path/logs       # override folder log (default: ./logs)
+```
+
+### Log
+
+Output cloudflared ditulis ke `logs/cloudflared-YYYYMMDD-HH.log`. Nama file
+mengikuti jam berjalan dan berganti sendiri saat jam berubah — tanpa restart,
+tanpa cron. Baris `ERR`/`FTL`/`PNC` juga ikut muncul di log bot sebagai `ERROR`
+(dan `WRN` sebagai `WARNING`), jadi masalah tunnel kelihatan tanpa harus buka
+file log.
+
+```bash
+./scripts/check-tunnel-logs.sh          # error + warning di jam ini
+./scripts/check-tunnel-logs.sh 6        # 6 file terakhir
+./scripts/check-tunnel-logs.sh all      # semua file
+./scripts/check-tunnel-logs.sh follow   # tail -f jam berjalan
+```
+
+Exit code `1` berarti ada error yang ketemu, `0` berarti bersih — enak dipakai
+di cron atau health check. File log tidak dihapus otomatis; kalau perlu, rotasi
+manual, misal `find logs -name 'cloudflared-*.log' -mtime +7 -delete`.
+
 ## Telegram Security
 
 - Command hanya diproses dari `telegram.chat_id` yang dikonfigurasi (ID numerik,
@@ -329,7 +362,8 @@ retry dengan exponential backoff. Instance Camoufox dipertahankan hidup
 selama proses berjalan agar cookie `cf_clearance` tidak hilang antar request.
 
 ### Tunnel not accessible
-Pastikan `cloudflared` terinstall dan `webhook.enabled: true`.
+Pastikan `cloudflared` terinstall dan `webhook.enabled: true`, lalu cek log
+tunnel: `./scripts/check-tunnel-logs.sh` (lihat [Cloudflare Tunnel](#cloudflare-tunnel)).
 
 ## License
 

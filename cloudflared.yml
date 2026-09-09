@@ -1,0 +1,22 @@
+# cloudflared config for the Quick Tunnel used by the Telegram webhook.
+#
+# Loaded from the project root by notifier/tunnel.py (override with the
+# CLOUDFLARED_CONFIG env var). The origin URL is supplied at runtime via
+# --url, so it is intentionally not set here.
+#
+# Output is captured by tunnel.py and written to logs/cloudflared-YYYYMMDD-HH.log
+# (override the directory with CLOUDFLARED_LOG_DIR), so no `logfile:` here.
+
+# Never let cloudflared restart itself underneath the bot.
+no-autoupdate: true
+
+# info keeps the connection/error lines we grep for; use debug when digging.
+loglevel: info
+transport-loglevel: warn
+
+# QUIC can be blocked on some networks; http2 is the safe default here.
+protocol: http2
+
+# Retry connecting to the Cloudflare edge instead of exiting on a blip.
+retries: 5
+grace-period: 30s

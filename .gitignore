@@ -15,3 +15,7 @@ __pycache__/
 bookingkai_debug*.html
 screen.jpg
 cf_template.png
+
+# cloudflared hourly logs (keep the directory for the Docker bind mount)
+logs/*
+!logs/.gitkeep

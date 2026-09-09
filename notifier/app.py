@@ -152,7 +152,7 @@ async def run_bot(logger: logging.Logger, cfg: Config, telegram: TelegramClient,
             try:
                 public_url = await tunnel.start(f"http://127.0.0.1:{cfg.webhook.port}")
             except Exception as e:
-                logger.error("Failed to start tunnel error=%s", e)
+                logger.error("Failed to start tunnel error=%s log_file=%s", e, tunnel.log_file)
                 return
             await telegram.set_webhook(public_url + "/webhook", webhook.secret_token)
             await telegram.send_message(f"🚀 Bot started!\n🔗 {public_url}\n\n{help_text}")

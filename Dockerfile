@@ -24,8 +24,11 @@ RUN pip install -r requirements.txt \
     && groupadd --gid 10001 notifier \
     && useradd --create-home --uid 10001 --gid 10001 notifier
 
-COPY main.py ./
+COPY main.py cloudflared.yml ./
 COPY notifier/ ./notifier/
+
+# cloudflared logs land here (bind-mount ./logs to read them from the host).
+RUN mkdir -p /app/logs && chown notifier:notifier /app/logs
 
 USER notifier
 # Fetch as the runtime user so the fallback finds its browser in the same cache.
